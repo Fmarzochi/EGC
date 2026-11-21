@@ -267,7 +267,7 @@ async function main() {
   // -- Text parser unit tests -----------------------------------------------
   console.log('');
 
-  await test('_parsePeersText: 2 local peers, 1 peer of another machine, 1 lock', async () => {
+  await test('_parsePeersText: 2 local peers, 1 peer of another machine, 2 locks (one of another machine)', async () => {
     stubBusText(PEERS_TEXT_2);
     let result;
     try {

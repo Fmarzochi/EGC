@@ -156,7 +156,7 @@ function territoryNote(territory: unknown): string {
 // encoded, and the parsers decode them: the field keeps its value and the
 // line keeps its shape. Line breaks become spaces.
 function lineSafe(value: string, delimiters: RegExp): string {
-  return value.replaceAll(/[\r\n]+/g, ' ').replaceAll(delimiters, character => `%${character.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')}`);
+  return value.replaceAll(/[\r\n]+/g, ' ').replaceAll(delimiters, character => `%${(character.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(2, '0')}`);
 }
 
 // A session of another machine of the team carries the label of its machine,

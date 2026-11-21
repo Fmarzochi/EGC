@@ -111,6 +111,7 @@ export async function sweepDead(db: BusDb, nowMs: number = Date.now()): Promise<
   const eventCutoff = new Date(nowMs - EVENT_TTL_SECONDS * 1000).toISOString();
   await db.run('DELETE FROM bus_events WHERE created_at < ?', eventCutoff);
   await db.run('DELETE FROM bus_event_cursors WHERE session_id NOT IN (SELECT id FROM bus_sessions)');
+  await db.run('DELETE FROM mesh_inbound_events WHERE event_id NOT IN (SELECT id FROM bus_events)');
 }
 
 export async function announce(
@@ -340,11 +341,7 @@ export async function recordInboundEvent(db: BusDb, value: unknown, nowMs: numbe
 // a broadcast with no repository reaches every session. null when nobody
 // here would read it.
 function inboundDestinations(event: SharedEvent, sessions: Record<string, unknown>[]): Array<string | null> | null {
-  if (event.to_session) {
-    const target = sessions.find(row => rowText(row.id) === event.to_session);
-    if (!target) return null;
-    return [target.project_path ? rowText(target.project_path) : null];
-  }
+  if (event.to_session) return directDestination(event, sessions);
   if (!event.project_key) return [null];
   const checkouts = new Set<string>();
   for (const row of sessions) {
@@ -352,6 +349,16 @@ function inboundDestinations(event: SharedEvent, sessions: Record<string, unknow
     if (projectPath && projectKeyOf(projectPath) === event.project_key) checkouts.add(projectPath);
   }
   return checkouts.size > 0 ? [...checkouts] : null;
+}
+
+// A direct event names its repository; the target session has to be in
+// that repository, not merely carry the id the sender asked for.
+function directDestination(event: SharedEvent, sessions: Record<string, unknown>[]): Array<string | null> | null {
+  const target = sessions.find(row => rowText(row.id) === event.to_session);
+  if (!target) return null;
+  const targetPath = target.project_path ? rowText(target.project_path) : null;
+  if (event.project_key && projectKeyOf(targetPath) !== event.project_key) return null;
+  return [targetPath];
 }
 
 // The remote sessions as session_peers lists them: those of the machines
@@ -570,9 +577,14 @@ function relativeLockPath(project: string, key: string): string | null {
 // The locks of this machine that another machine can relate to: those on a
 // path inside a project with a repository identity.
 export async function listSharedLocks(db: BusDb, nowMs: number = Date.now()): Promise<SharedLock[]> {
+  // A lock of a session that fell silent is not the machine's to tell: the
+  // sweep removes it here, and the other machines stop refusing it with the
+  // next word from this one.
+  const liveSince = new Date(nowMs - SESSION_TTL_SECONDS * 1000).toISOString();
   const rows = await db.all(
     `SELECT l.path, l.session_id, l.acquired_at, l.ttl_seconds, s.project_path FROM bus_locks l
-     JOIN bus_sessions s ON s.id = l.session_id ORDER BY l.acquired_at`
+     JOIN bus_sessions s ON s.id = l.session_id WHERE s.heartbeat_at >= ? ORDER BY l.acquired_at`,
+    liveSince
   );
   const shared: SharedLock[] = [];
   for (const row of rows) {
@@ -604,14 +616,16 @@ function cleanSharedLock(value: unknown): SharedLock | null {
 // snapshot of another machine's locks, a box taken and what it said. SQLite
 // has no nested transactions, so the callers do not open their own inside.
 export async function withBusTransaction<T>(db: BusDb, work: () => Promise<T>): Promise<T> {
-  await db.run('BEGIN IMMEDIATE');
+  // Transaction control goes through exec: the portable adapter tracks the
+  // transaction there, and holds it until the commit.
+  await db.exec('BEGIN IMMEDIATE');
   try {
     const result = await work();
-    await db.run('COMMIT');
+    await db.exec('COMMIT');
     return result;
   } catch (error) {
     try {
-      await db.run('ROLLBACK');
+      await db.exec('ROLLBACK');
     } catch {
       // the transaction is gone already
     }
@@ -694,8 +708,8 @@ export async function sendEvent(
     if (!target) {
       // A session of another machine, in the same repository, is reached
       // through the bridge, which forwards what is queued for it here.
-      const remote = (await listRemoteSessions(db, input.projectPath, nowMs)).find(row => row.id === input.toSession);
-      if (!remote) return { ok: false, reason: `session ${input.toSession} is not live on the bus` };
+      const known = (await listRemoteSessions(db, input.projectPath, nowMs)).some(row => row.id === input.toSession);
+      if (!known) return { ok: false, reason: `session ${input.toSession} is not live on the bus` };
     } else if ((target.project_path ?? null) !== (input.projectPath ?? null)) {
       // A direct event stays inside the sender's project, like a broadcast;
       // a sender without a project only reaches a session without one.
