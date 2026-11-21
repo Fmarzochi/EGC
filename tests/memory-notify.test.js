@@ -90,7 +90,7 @@ function remoteCommits(remote) {
 }
 
 function parseEvents(text) {
-  return [...text.matchAll(/^- #\d+ \[([^\]]+)\] from (\S+)/gm)].map(match => ({ kind: match[1], from: match[2] }));
+  return [...text.matchAll(/^- #(\d+) \[([^\]]+)\] from (\S+)/gm)].map(match => ({ id: Number(match[1]), kind: match[2], from: match[3] }));
 }
 
 async function runTests() {
@@ -146,8 +146,11 @@ async function runTests() {
         await callTool(writer, 'working_memory_set', { project_path: project, key: `k${index}`, value: 'v' });
       }
       const text = await callTool(reader, 'session_events', { project_path: project });
-      const count = parseEvents(text).filter(event => event.kind === 'memory:changed').length;
-      assert.strictEqual(count, 20, `twenty-five writes against a cap of twenty leave exactly twenty, got ${count}`);
+      const ids = parseEvents(text).filter(event => event.kind === 'memory:changed').map(event => event.id);
+      assert.strictEqual(ids.length, 20, `twenty-five writes against a cap of twenty leave exactly twenty, got ${ids.length}`);
+      // The ids of the bus grow with every event: twenty survivors spanning
+      // nineteen are the twenty newest, with none of the older ones kept.
+      assert.strictEqual(Math.max(...ids) - Math.min(...ids), 19, `the twenty kept are the newest, consecutive ids: ${ids.join(', ')}`);
     });
 
     await writer.stop();
@@ -161,14 +164,39 @@ async function runTests() {
       teamCli(homeA, ['init', '--backend', 'git', '--remote', remote]);
       const before = remoteHead(remote);
       const commitsBefore = remoteCommits(remote);
-      const server = start(homeA, { EGC_MEMORY_PUSH_DELAY_MS: '400' });
+      // Two seconds between the first write and the sync: room for the
+      // second write on a slow runner, so the two become one sync.
+      const server = start(homeA, { EGC_MEMORY_PUSH_DELAY_MS: '2000' });
       await initialize(server, 'pusher');
       await callTool(server, 'update_state', { project_path: project, context: 'Pushed by the write.' });
       await callTool(server, 'update_state', { project_path: project, decisions: [{ what: 'second write', why: 'joins the first' }] });
       await until(() => remoteHead(remote) !== null && remoteHead(remote) !== before, 'the remote to receive the sync scheduled by the writes');
-      await new Promise(resolve => setTimeout(resolve, 1200));
+      await new Promise(resolve => setTimeout(resolve, 2500));
       assert.strictEqual(remoteCommits(remote) - commitsBefore, 1, 'two writes within the delay became one sync, one commit on the remote, and nothing syncs again without a write');
       await server.stop();
+    });
+
+    await test('with the sync around the session off, a write is told and nothing syncs by itself', async () => {
+      const remote = path.join(root, 'team-remote');
+      teamCli(homeA, ['autosync', 'off']);
+      try {
+        const before = remoteHead(remote);
+        const listener = start(homeA, { EGC_MEMORY_PUSH_DELAY_MS: '300' });
+        await initialize(listener, 'listener');
+        await callTool(listener, 'session_announce', { project_path: project, territory: 'listening' });
+        await callTool(listener, 'session_events', { project_path: project });
+        const server = start(homeA, { EGC_MEMORY_PUSH_DELAY_MS: '300' });
+        await initialize(server, 'quiet-writer');
+        assert.ok((await callTool(server, 'update_state', { project_path: project, context: 'Written with the autosync off.' })).includes('Project memory updated'), 'the write itself succeeds');
+        await until(async () => parseEvents(await callTool(listener, 'session_events', { project_path: project, peek: true })).some(event => event.kind === 'memory:changed'), 'the notice to reach the listener: the write is told even with the switch off');
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        assert.strictEqual(remoteHead(remote), before, 'the remote did not move: the switch is off');
+        await server.stop();
+        await listener.stop();
+        assert.strictEqual(remoteHead(remote), before, 'nor did the stops sync it');
+      } finally {
+        teamCli(homeA, ['autosync', 'on']);
+      }
     });
 
     await test('a sync still pending when the server stops runs before it closes', async () => {

@@ -120,14 +120,16 @@ export async function handleLessonSave(db: Database, args: unknown) {
   }
 
   // Exact-match deduplication: reinforce an identical lesson instead of duplicating.
-  const duplicate = await db.get<{id: string}>(
-    'SELECT id FROM lessons WHERE content = ? AND context = ? AND archived = 0',
+  const duplicate = await db.get<{ id: string; project_path: string | null }>(
+    'SELECT id, project_path FROM lessons WHERE content = ? AND context = ? AND archived = 0',
     [content, context]
   );
   if (duplicate) {
     log('INFO', 'Lesson deduplicated via exact match, reinforcing', { id: duplicate.id });
     const reinforced = await handleLessonReinforce(db, { id: duplicate.id });
-    await notifyMemoryChanged(db, BUS_SESSION_ID, { kind: 'lesson', projectPath: resolveProjectPath() ?? null });
+    // The notice names the project of the lesson that changed, which may not
+    // be the project of the caller.
+    await notifyMemoryChanged(db, BUS_SESSION_ID, { kind: 'lesson', projectPath: duplicate.project_path ?? null });
     return reinforced;
   }
 
