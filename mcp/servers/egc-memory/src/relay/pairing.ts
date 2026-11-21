@@ -291,26 +291,29 @@ export async function invite(options: InviteOptions): Promise<PairOutcome> {
   const outcome = await new Promise<PairOutcome>(resolve => {
     let taken = false;
     const deadline = setTimeout(() => resolve(refused('no machine joined in time')), timeoutMs);
+    const failed = (error: unknown): void => resolve(refused(error instanceof Error ? error.message : String(error)));
+    // The invitation goes to the first connection that says hello in time;
+    // one that only holds the socket is dropped, and the next may come.
+    const admit = async (wire: Wire): Promise<void> => {
+      const theirs = await awaitHello(wire, HELLO_TIMEOUT_MS);
+      if (!theirs || taken) {
+        if (theirs) wire.send({ t: 'abort', reason: 'another machine is pairing' });
+        wire.end();
+        return;
+      }
+      taken = true;
+      clearTimeout(deadline);
+      resolve(await hostExchange(wire, theirs, keys, options));
+    };
     server.on('connection', socket => {
       if (taken) {
         socket.end(`${JSON.stringify({ t: 'abort', reason: 'another machine is pairing' })}\n`);
         return;
       }
-      // The invitation goes to the first connection that says hello in
-      // time; one that only holds the socket is dropped, and the next may come.
       const wire = new Wire(socket, timeoutMs);
       wires.add(wire);
-      wire.whenClosed().then(() => wires.delete(wire));
-      awaitHello(wire, HELLO_TIMEOUT_MS).then(theirs => {
-        if (!theirs || taken) {
-          if (theirs) wire.send({ t: 'abort', reason: 'another machine is pairing' });
-          wire.end();
-          return;
-        }
-        taken = true;
-        clearTimeout(deadline);
-        hostExchange(wire, theirs, keys, options).then(resolve, error => resolve(refused(error instanceof Error ? error.message : String(error))));
-      });
+      wire.whenClosed().then(() => { wires.delete(wire); }, () => undefined);
+      admit(wire).catch(failed);
     });
   });
   for (const wire of wires) wire.end();
