@@ -151,6 +151,37 @@ async function runTests() {
       assert.ok(Math.abs(matches[0].confidence - 0.85) < 1e-9, `the higher confidence won: ${matches[0].confidence}`);
       assert.strictEqual(recordFiles(homeA, 'lesson').length, 1, 'still one sealed record for the lesson');
     });
+
+    await test('a later write of the same key on the other machine wins by its write time, with a shorter life, and the two folders stay one row', async () => {
+      await new Promise(resolve => setTimeout(resolve, 1100));
+      assert.ok((await callTool(serverB, 'working_memory_set', { project_path: projectB, key: 'branch', value: 'from-b', ttl_seconds: 120 })).includes('stored'));
+      await callTool(serverB, 'team_sync', {});
+      assert.strictEqual(recordFiles(homeB, 'working-memory').length, 1, 'the key of one repository under two folders is one record');
+      await callTool(serverA, 'team_sync', {});
+      const entry = JSON.parse(await callTool(serverA, 'working_memory_get', { project_path: projectA, key: 'branch' }));
+      assert.strictEqual(entry.entry?.value ?? entry.value, 'from-b', `the later write won on A:\n${JSON.stringify(entry)}`);
+      const listed = await callTool(serverA, 'working_memory_list', { project_path: projectA });
+      assert.strictEqual((listed.match(/"key": "branch"/g) || []).length, 1, `one entry for the key on A:\n${listed}`);
+    });
+
+    await test('a records directory that arrives from the repository as a link is refused on both ways, and nothing lands outside the tree', async () => {
+      const outside = path.join(root, 'outside');
+      fs.mkdirSync(outside, { recursive: true });
+      // Another machine commits records/decision as a link: the pull brings
+      // the link as it is, and the sync must neither read nor write through it.
+      await callTool(serverB, 'team_sync', {});
+      const checkoutB = path.join(homeB, '.egc', 'team-sync');
+      const decisionDir = path.join(checkoutB, 'records', 'decision');
+      fs.rmSync(decisionDir, { recursive: true, force: true });
+      fs.symlinkSync(outside, decisionDir, 'dir');
+      git(checkoutB, ['add', 'records']);
+      git(checkoutB, ['-c', 'user.name=records-test', '-c', 'user.email=records-test@example.com', 'commit', '-q', '-m', 'records/decision as a link']);
+      git(checkoutB, ['push', '-q', 'origin', 'HEAD']);
+      const synced = await callTool(serverA, 'team_sync', {});
+      assert.ok(synced.includes('records/decision/'), `the merge reports the linked directory:\n${synced}`);
+      assert.ok(/sits behind a link/.test(synced), `the staging refuses the decision behind the link:\n${synced}`);
+      assert.strictEqual(fs.readdirSync(outside).length, 0, 'nothing was written through the link');
+    });
   } finally {
     for (const server of servers) await server.stop();
     fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });

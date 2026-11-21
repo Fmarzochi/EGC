@@ -160,13 +160,14 @@ export async function teamInit(backend: string, remote: string, branch: string =
 
 // The records of the other machines, merged by id into the store of this
 // server; nothing to do for a sync that runs without a store.
-async function mergeTeamRecords(teamKey: Buffer, result: SyncResult): Promise<void> {
-  if (!recordsSource) return;
-  const records = await mergeRecords(recordsSource.db, SYNC_RECORDS_DIR, teamKey, { enqueue: recordsSource.enqueue });
+async function mergeTeamRecords(teamKey: Buffer, result: SyncResult): Promise<string[]> {
+  if (!recordsSource) return [];
+  const records = await mergeRecords(recordsSource.db, SYNC_RECORDS_DIR, teamKey, { enqueue: recordsSource.enqueue, root: SYNC_CHECKOUT_DIR });
   result.recordsMerged = records.merged;
   for (const refused of [...records.rejected, ...records.unopened]) {
-    result.errors.push(`Rejected sync record (not a verified team record for its path): ${RECORDS_DIR}/${refused}`);
+    result.errors.push(`Rejected sync record (not a verified team record for its path, or above the size one record may carry): ${RECORDS_DIR}/${refused}`);
   }
+  return records.expired;
 }
 
 export async function teamSync(): Promise<SyncResult> {
@@ -241,7 +242,7 @@ export async function teamSync(): Promise<SyncResult> {
     for (const unreadable of merge.unreadable) {
       result.errors.push(`Local state file could not be decrypted and was left untouched: ${unreadable}`);
     }
-    await mergeTeamRecords(teamKey, result);
+    const expiredRecords = await mergeTeamRecords(teamKey, result);
     // Step 3: Stage local state as sealed envelopes and push. A key that
     // opened none of the files on the remote is not shown to be the team's
     // key, and a push with it would put envelopes the teammates cannot open
@@ -249,7 +250,7 @@ export async function teamSync(): Promise<SyncResult> {
     if (keyNotProven(merge)) {
       result.errors.push(keyNotProvenMessage(merge.unopened.length));
     } else {
-      await pushSealedState(instance, teamKey, personalKey, merges, result);
+      await pushSealedState(instance, teamKey, personalKey, merges, result, expiredRecords);
     }
 
     // Step 4: Check for conflicts.
@@ -492,7 +493,7 @@ function keyNotProvenMessage(count: number): string {
   return `This team key opened none of the remote state (${files}), so nothing was pushed and the shared state was left as it was. If the key is wrong, run egc team init again with the key of the team; if the key is right, the files on the remote are damaged and have to be removed from the repository by hand.`;
 }
 
-async function pushSealedState(instance: SyncBackend, teamKey: Buffer, personalKey: Buffer, merges: readonly TreeMerge[], result: SyncResult): Promise<void> {
+async function pushSealedState(instance: SyncBackend, teamKey: Buffer, personalKey: Buffer, merges: readonly TreeMerge[], result: SyncResult, expiredRecords: readonly string[] = []): Promise<void> {
   try {
     // One push carries every tree, so the cap of a push is shared by them.
     const ledger: StagingLedger = { stagedBytes: 0 };
@@ -503,9 +504,16 @@ async function pushSealedState(instance: SyncBackend, teamKey: Buffer, personalK
         result.warnings.push(`Not pushed: ${tree.label}/${refusal.path} ${refusal.reason}. Rewrite that document on this machine (update_state rewrites it) and sync again; the version pushed before, if any, stays on the remote.`);
       }
     }
-    // The records of this machine, one sealed file each, in the same push.
+    // The records of this machine, one sealed file each, in the same push
+    // and under its cap; the verified records the merge found expired leave
+    // the tree with it.
     if (recordsSource) {
-      const staging = stageRecords(await collectRecords(recordsSource.db, machineLabel() ?? 'this machine'), SYNC_RECORDS_DIR, teamKey, { secretShape: secretShapeIn });
+      const staging = stageRecords(await collectRecords(recordsSource.db, machineLabel() ?? 'this machine'), SYNC_RECORDS_DIR, teamKey, {
+        secretShape: secretShapeIn,
+        root: SYNC_CHECKOUT_DIR,
+        push: { pushBytes: DEFAULT_LIMITS.pushBytes, ledger },
+        expired: expiredRecords,
+      });
       result.recordsStaged = staging.staged;
       for (const refusal of staging.refused) {
         result.warnings.push(`Not pushed: ${RECORDS_DIR}/${refusal.path} ${refusal.reason}.`);

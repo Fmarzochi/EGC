@@ -10,17 +10,21 @@ import { openEnvelope, sealEnvelope } from './envelope';
 
 // The memory that is not a state document, carried by the team sync as one
 // sealed record per row: the lessons, the decisions of the history and the
-// working memory. Each record travels under records/<kind>/<id>.json, sealed
-// for its path as a state document is, and merges by id on the other
+// working memory. Each record sits under records/<kind>/<id>.json in the
+// team repository, signed over its path within that tree (<kind>/<id>.json)
+// as a state document is over its own, and merges by id on the other
 // machine: a lesson reinforced on two machines keeps the higher confidence
 // and the later dates, a decision is written once, a working memory entry
-// is taken only when newer and never once expired. Every record names the
-// machine it was written on, and the project by the key of its remote, so
-// the same repository under two folders meets.
+// is taken only when written later and never once expired. Every record
+// names the machine it was written on, and the project by the key of its
+// remote, so the same repository under two folders meets.
 export type RecordKind = 'lesson' | 'decision' | 'working-memory';
 export const RECORD_KINDS: readonly RecordKind[] = ['lesson', 'decision', 'working-memory'];
 export const RECORDS_DIR = 'records';
 export const MAX_RECORD_BYTES = 64 * 1024;
+// A sealed record is its text in base64 inside the envelope; a file in the
+// tree past this size is not even opened.
+const MAX_SEALED_RECORD_BYTES = MAX_RECORD_BYTES * 2;
 const RECORD_ID_RE = /^[A-Za-z0-9._-]{1,120}$/;
 
 export interface SyncRecord {
@@ -38,15 +42,24 @@ export interface RecordsRefusal {
 export interface RecordsStaging {
   staged: number;
   written: number;
+  // The files of expired records that left the tree.
+  removed: number;
   refused: RecordsRefusal[];
 }
 
 export interface RecordsMerge {
   opened: number;
   merged: number;
+  // Verified records of working memory found expired: ignored, and removed
+  // from the tree by the staging that follows.
+  expired: string[];
   rejected: string[];
   unopened: string[];
 }
+
+// The bytes one push may carry and what this push holds already, shared
+// with the state documents staged for the same push.
+export interface PushBudget { pushBytes: number; ledger: { stagedBytes: number } }
 
 export interface RecordsOptions {
   // The refusal of the team sync for a text that looks like a credential.
@@ -54,6 +67,13 @@ export interface RecordsOptions {
   // The write arbiter of the server; the writes run in order through it.
   enqueue?: <T>(work: () => Promise<T>) => Promise<T>;
   now?: () => number;
+  // The directory every record path must stay within, with no link on the
+  // way; the parent of the records directory when not given.
+  root?: string;
+  push?: PushBudget;
+  // The paths the merge before this staging found expired, verified: their
+  // files leave the tree.
+  expired?: readonly string[];
 }
 
 // The key of a project as the records name it: the key of its remote when
@@ -89,9 +109,49 @@ export function machineLabel(): string | null {
   }
 }
 
+export interface WorkingMemoryWrite {
+  projectPath: string;
+  projectKey: string | null;
+  key: string;
+  value: string;
+  // Both in seconds since the epoch.
+  expiresAt: number;
+  updatedAt: number;
+  machine: string | null;
+}
+
+// The rows of one project: the ones under this path, and the ones another
+// machine wrote for the same repository under its own path. Two parameters,
+// the key of the project and then its path.
+export const SAME_PROJECT_SQL = '((project_key IS NOT NULL AND project_key = ?) OR project_path = ?)';
+
+// One row per key for a repository, whatever the folder: a write lands on
+// the row the repository has here already, under the folder it was first
+// written under, or opens a new one. With newerOnly, a write no later than
+// the row stays out; a row written before the write time existed (0) yields.
+export async function upsertWorkingMemory(db: Database, entry: WorkingMemoryWrite, newerOnly: boolean): Promise<boolean> {
+  const local = await db.get<{ project_path: string; updated_at: number }>(
+    `SELECT project_path, updated_at FROM working_memory WHERE key = ? AND ${SAME_PROJECT_SQL} ORDER BY updated_at DESC, expires_at DESC LIMIT 1`,
+    [entry.key, entry.projectKey, entry.projectPath]
+  );
+  if (!local) {
+    await db.run(
+      'INSERT INTO working_memory (id, project_path, project_key, key, value, expires_at, machine_label, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [crypto.randomUUID(), entry.projectPath, entry.projectKey, entry.key, entry.value, entry.expiresAt, entry.machine, entry.updatedAt]
+    );
+    return true;
+  }
+  if (newerOnly && entry.updatedAt <= local.updated_at) return false;
+  await db.run(
+    'UPDATE working_memory SET value = ?, expires_at = ?, project_key = COALESCE(project_key, ?), machine_label = ?, updated_at = ? WHERE project_path = ? AND key = ?',
+    [entry.value, entry.expiresAt, entry.projectKey, entry.machine, entry.updatedAt, local.project_path, entry.key]
+  );
+  return true;
+}
+
 interface LessonRow { id: string; content: string; context: string; confidence: number; last_reinforced: string | null; last_recalled: string | null; created_at: string; tags: string | null; archived: number; project_path: string | null; project_key: string | null; author: string | null; machine_label: string | null }
 interface DecisionRow { record_id: string; context: string | null; decision: string | null; timestamp: string; project_path: string | null; project_key: string | null; machine_label: string | null }
-interface WorkingMemoryRow { project_path: string; project_key: string | null; key: string; value: string; expires_at: number; machine_label: string | null }
+interface WorkingMemoryRow { project_path: string; project_key: string | null; key: string; value: string; expires_at: number; machine_label: string | null; updated_at: number }
 
 // Every record this machine holds, the way it travels; a record that came
 // from another machine keeps that machine's name.
@@ -105,10 +165,16 @@ export async function collectRecords(db: Database, machine: string, now: number 
   for (const row of decisions) {
     records.push({ kind: 'decision', id: row.record_id, machine: row.machine_label ?? machine, body: { context: row.context, decision: row.decision, timestamp: row.timestamp, projectPath: row.project_path, projectKey: row.project_key } });
   }
-  // The working memory keeps its expiry in seconds since the epoch.
-  const working = await db.all<WorkingMemoryRow[]>('SELECT project_path, project_key, key, value, expires_at, machine_label FROM working_memory WHERE expires_at > ?', [Math.floor(now / 1000)]);
+  // The working memory keeps its expiry and its write time in seconds since
+  // the epoch; the same key of one repository under two folders travels
+  // once, by its latest write.
+  const working = await db.all<WorkingMemoryRow[]>('SELECT project_path, project_key, key, value, expires_at, machine_label, updated_at FROM working_memory WHERE expires_at > ? ORDER BY updated_at DESC, expires_at DESC', [Math.floor(now / 1000)]);
+  const seen = new Set<string>();
   for (const row of working) {
-    records.push({ kind: 'working-memory', id: workingMemoryRecordId(row.project_key, row.project_path, row.key), machine: row.machine_label ?? machine, body: { projectPath: row.project_path, projectKey: row.project_key, key: row.key, value: row.value, expiresAt: row.expires_at } });
+    const id = workingMemoryRecordId(row.project_key, row.project_path, row.key);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    records.push({ kind: 'working-memory', id, machine: row.machine_label ?? machine, body: { projectPath: row.project_path, projectKey: row.project_key, key: row.key, value: row.value, expiresAt: row.expires_at, updatedAt: row.updated_at } });
   }
   return records.filter(record => RECORD_ID_RE.test(record.id));
 }
@@ -117,41 +183,126 @@ function recordPath(record: Pick<SyncRecord, 'kind' | 'id'>): string {
   return `${record.kind}/${record.id}.json`;
 }
 
-function alreadySealed(target: string, plaintext: string, teamKey: Buffer, relativePath: string): boolean {
+function isLink(filePath: string): boolean {
   try {
-    if (!fs.lstatSync(target).isFile()) return false;
-    return openEnvelope(fs.readFileSync(target, 'utf8'), teamKey, relativePath) === plaintext;
+    return fs.lstatSync(filePath).isSymbolicLink();
   } catch {
     return false;
   }
+}
+
+function isRegularFile(filePath: string): boolean {
+  try {
+    return fs.lstatSync(filePath).isFile();
+  } catch {
+    return false;
+  }
+}
+
+// The first link between `root` (exclusive) and `target` (inclusive), or
+// the target itself when it does not sit under the root: a read or a write
+// there would land elsewhere, so the sync never goes there.
+function linkOnTheWay(target: string, root: string): string | null {
+  const top = path.resolve(root);
+  let probe = path.resolve(target);
+  if (probe === top || !probe.startsWith(top + path.sep)) return probe;
+  const components: string[] = [];
+  while (probe !== top) {
+    components.unshift(probe);
+    probe = path.dirname(probe);
+  }
+  return components.find(isLink) ?? null;
+}
+
+// What the sync tree holds at the path of a record: nothing, the very same
+// record, another text, an envelope that does not open with the team key
+// (never written over), or something that is not a regular file.
+type SealedState = 'absent' | 'same' | 'different' | 'unopened' | 'not-a-file';
+
+function sealedState(target: string, plaintext: string, teamKey: Buffer, relativePath: string): SealedState {
+  if (!isLink(target) && !fs.existsSync(target)) return 'absent';
+  if (!isRegularFile(target)) return 'not-a-file';
+  try {
+    const opened = openEnvelope(fs.readFileSync(target, 'utf8'), teamKey, relativePath);
+    if (opened === null) return 'unopened';
+    return opened === plaintext ? 'same' : 'different';
+  } catch {
+    return 'unopened';
+  }
+}
+
+interface StageContext { recordsDir: string; root: string; teamKey: Buffer; options: RecordsOptions }
+type StageOutcome = { refusal: string } | { written: boolean };
+
+// Why a record may not leave: a secret shape in it, a size above the cap of
+// one record, or a link on its way in the tree. Null when it may.
+function refusalBeforeSealing(plaintext: string, target: string, context: StageContext): string | null {
+  const shape = context.options.secretShape?.(plaintext) ?? null;
+  if (shape) return `holds what looks like ${shape}`;
+  const bytes = Buffer.byteLength(plaintext, 'utf8');
+  if (bytes > MAX_RECORD_BYTES) return `is ${bytes} bytes, above the ${MAX_RECORD_BYTES} bytes one record may carry`;
+  const link = linkOnTheWay(target, context.root);
+  if (link) return `sits behind a link (${path.basename(link)}), which the sync never follows`;
+  return null;
+}
+
+// One record into the tree: left as it is when the file there holds it
+// already, written when the file is absent or holds another text, refused
+// when the file there does not open, is not a regular file, or would take
+// the push past its cap.
+function stageOne(record: SyncRecord, context: StageContext): StageOutcome {
+  const relativePath = recordPath(record);
+  const plaintext = JSON.stringify(record);
+  const target = path.join(context.recordsDir, record.kind, `${record.id}.json`);
+  const refusal = refusalBeforeSealing(plaintext, target, context);
+  if (refusal) return { refusal };
+  const state = sealedState(target, plaintext, context.teamKey, relativePath);
+  if (state === 'same') return { written: false };
+  if (state === 'unopened') return { refusal: 'has an envelope in the sync tree already that does not open with the team key, left as it is' };
+  if (state === 'not-a-file') return { refusal: 'is not a regular file in the sync tree' };
+  const bytes = Buffer.byteLength(plaintext, 'utf8');
+  const push = context.options.push;
+  if (push && push.ledger.stagedBytes + bytes > push.pushBytes) return { refusal: `would take this push past the ${push.pushBytes} bytes one push may carry` };
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, sealEnvelope(plaintext, context.teamKey, relativePath), 'utf8');
+  if (push) push.ledger.stagedBytes += bytes;
+  return { written: true };
+}
+
+// The files of verified records the merge found expired: they leave the
+// tree, and the push carries the removal. A file that will not go now goes
+// with the next sync.
+function removeExpired(paths: readonly string[], context: StageContext): number {
+  let removed = 0;
+  for (const relativePath of paths) {
+    const target = path.join(context.recordsDir, relativePath);
+    if (linkOnTheWay(target, context.root) || !isRegularFile(target)) continue;
+    try {
+      fs.unlinkSync(target);
+      removed += 1;
+    } catch {
+      // Left in the tree for the next sync.
+    }
+  }
+  return removed;
 }
 
 // The records sealed into the sync tree, one file each; a file already
 // holding the same record is left as it is, so a sync with nothing new
 // writes nothing.
 export function stageRecords(records: readonly SyncRecord[], recordsDir: string, teamKey: Buffer, options: RecordsOptions = {}): RecordsStaging {
-  const outcome: RecordsStaging = { staged: 0, written: 0, refused: [] };
+  const context: StageContext = { recordsDir, root: options.root ?? path.dirname(recordsDir), teamKey, options };
+  const outcome: RecordsStaging = { staged: 0, written: 0, removed: 0, refused: [] };
   for (const record of records) {
-    const relativePath = recordPath(record);
-    const plaintext = JSON.stringify(record);
-    const shape = options.secretShape?.(plaintext) ?? null;
-    if (shape) {
-      outcome.refused.push({ path: relativePath, reason: `holds what looks like ${shape}` });
+    const staged = stageOne(record, context);
+    if ('refusal' in staged) {
+      outcome.refused.push({ path: recordPath(record), reason: staged.refusal });
       continue;
-    }
-    const bytes = Buffer.byteLength(plaintext, 'utf8');
-    if (bytes > MAX_RECORD_BYTES) {
-      outcome.refused.push({ path: relativePath, reason: `is ${bytes} bytes, above the ${MAX_RECORD_BYTES} bytes one record may carry` });
-      continue;
-    }
-    const target = path.join(recordsDir, record.kind, `${record.id}.json`);
-    if (!alreadySealed(target, plaintext, teamKey, relativePath)) {
-      fs.mkdirSync(path.dirname(target), { recursive: true });
-      fs.writeFileSync(target, sealEnvelope(plaintext, teamKey, relativePath), 'utf8');
-      outcome.written += 1;
     }
     outcome.staged += 1;
+    if (staged.written) outcome.written += 1;
   }
+  outcome.removed = removeExpired(options.expired ?? [], context);
   return outcome;
 }
 
@@ -198,34 +349,36 @@ async function mergeDecision(db: Database, record: SyncRecord): Promise<boolean>
   return true;
 }
 
-async function mergeWorkingMemory(db: Database, record: SyncRecord, now: number): Promise<boolean> {
+type MergeOutcome = 'merged' | 'expired' | 'rejected';
+
+async function mergeWorkingMemory(db: Database, record: SyncRecord, now: number): Promise<MergeOutcome> {
   const body = record.body;
   const projectPath = text(body.projectPath);
   const key = text(body.key);
   const value = text(body.value);
   const expiresAt = number(body.expiresAt);
-  if (!projectPath || !key || value === null || expiresAt === null) return false;
+  if (!projectPath || !key || value === null || expiresAt === null) return 'rejected';
   // Expired on the way: it never comes back (the expiry is in seconds).
-  if (expiresAt <= Math.floor(now / 1000)) return false;
-  await db.run(
-    `INSERT INTO working_memory (id, project_path, project_key, key, value, expires_at, machine_label) VALUES (?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(project_path, key) DO UPDATE SET
-       value = excluded.value, expires_at = excluded.expires_at, project_key = excluded.project_key, machine_label = excluded.machine_label
-     WHERE excluded.expires_at > working_memory.expires_at`,
-    [record.id, projectPath, text(body.projectKey), key, value, expiresAt, record.machine]
-  );
-  return true;
+  if (expiresAt <= Math.floor(now / 1000)) return 'expired';
+  // Onto the row this repository has here, whatever its folder, and only
+  // when written later than it.
+  await upsertWorkingMemory(db, { projectPath, projectKey: text(body.projectKey), key, value, expiresAt, updatedAt: number(body.updatedAt) ?? 0, machine: record.machine }, true);
+  return 'merged';
 }
 
 interface RecordEntry { kind: RecordKind; dir: string; name: string; relativePath: string }
 
-// The files of the records tree, kind by kind; anything that is not a
-// regular file is reported, never followed.
-function listRecordEntries(recordsDir: string): { entries: RecordEntry[]; rejected: string[] } {
+// The files of the records tree, kind by kind; a directory behind a link,
+// and anything that is not a regular file, is reported, never followed.
+function listRecordEntries(recordsDir: string, root: string): { entries: RecordEntry[]; rejected: string[] } {
   const entries: RecordEntry[] = [];
   const rejected: string[] = [];
   for (const kind of RECORD_KINDS) {
     const dir = path.join(recordsDir, kind);
+    if (linkOnTheWay(dir, root)) {
+      rejected.push(`${kind}/`);
+      continue;
+    }
     let found: fs.Dirent[];
     try {
       found = fs.readdirSync(dir, { withFileTypes: true });
@@ -245,15 +398,23 @@ type OpenedRecord = { record: SyncRecord } | { rejected: string } | { unopened: 
 
 // One file of the tree opened with the team key and read as the record its
 // path names; a file that does not open, or opens to something else, is told apart.
+// The text of one file of the tree, opened with the team key; null when the
+// file does not open. A file past the size a sealed record may have is not
+// read at all, and a text past the cap of one record is no record.
+function openSealedText(file: string, teamKey: Buffer, relativePath: string): string | null {
+  try {
+    if (fs.lstatSync(file).size > MAX_SEALED_RECORD_BYTES) return null;
+    const opened = openEnvelope(fs.readFileSync(file, 'utf8'), teamKey, relativePath);
+    return opened !== null && Buffer.byteLength(opened, 'utf8') <= MAX_RECORD_BYTES ? opened : null;
+  } catch {
+    return null;
+  }
+}
+
 function openRecord(entry: RecordEntry, teamKey: Buffer): OpenedRecord {
   const id = entry.name.slice(0, -'.json'.length);
   if (!RECORD_ID_RE.test(id)) return { rejected: entry.relativePath };
-  let plaintext: string | null;
-  try {
-    plaintext = openEnvelope(fs.readFileSync(path.join(entry.dir, entry.name), 'utf8'), teamKey, entry.relativePath);
-  } catch {
-    plaintext = null;
-  }
+  const plaintext = openSealedText(path.join(entry.dir, entry.name), teamKey, entry.relativePath);
   if (plaintext === null) return { unopened: entry.relativePath };
   let parsed: unknown;
   try {
@@ -272,8 +433,8 @@ function openRecord(entry: RecordEntry, teamKey: Buffer): OpenedRecord {
 export async function mergeRecords(db: Database, recordsDir: string, teamKey: Buffer, options: RecordsOptions = {}): Promise<RecordsMerge> {
   const now = options.now?.() ?? Date.now();
   const enqueue = options.enqueue ?? (<T>(work: () => Promise<T>): Promise<T> => work());
-  const listed = listRecordEntries(recordsDir);
-  const outcome: RecordsMerge = { opened: 0, merged: 0, rejected: [...listed.rejected], unopened: [] };
+  const listed = listRecordEntries(recordsDir, options.root ?? path.dirname(recordsDir));
+  const outcome: RecordsMerge = { opened: 0, merged: 0, expired: [], rejected: [...listed.rejected], unopened: [] };
   await Promise.all(listed.entries.map(entry => openRecord(entry, teamKey)).map(async opened => {
     if ('unopened' in opened) {
       outcome.unopened.push(opened.unopened);
@@ -284,15 +445,16 @@ export async function mergeRecords(db: Database, recordsDir: string, teamKey: Bu
       return;
     }
     outcome.opened += 1;
-    const written = await enqueue(() => mergeOne(db, opened.record, now));
-    if (written) outcome.merged += 1;
+    const merged = await enqueue(() => mergeOne(db, opened.record, now));
+    if (merged === 'merged') outcome.merged += 1;
+    else if (merged === 'expired') outcome.expired.push(recordPath(opened.record));
     else outcome.rejected.push(recordPath(opened.record));
   }));
   return outcome;
 }
 
-function mergeOne(db: Database, record: SyncRecord, now: number): Promise<boolean> {
-  if (record.kind === 'lesson') return mergeLesson(db, record);
-  if (record.kind === 'decision') return mergeDecision(db, record);
+async function mergeOne(db: Database, record: SyncRecord, now: number): Promise<MergeOutcome> {
+  if (record.kind === 'lesson') return (await mergeLesson(db, record)) ? 'merged' : 'rejected';
+  if (record.kind === 'decision') return (await mergeDecision(db, record)) ? 'merged' : 'rejected';
   return mergeWorkingMemory(db, record, now);
 }
