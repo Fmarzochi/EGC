@@ -55,8 +55,10 @@ function readMachineFile(file: string): MachineIdentity | null {
 function setDamagedAside(file: string): void {
   try {
     fs.renameSync(file, `${file}.damaged.${process.pid}.${crypto.randomBytes(4).toString('hex')}`);
-  } catch {
-    // another server moved it, or it is gone already
+  } catch (error) {
+    // Another server moved it already; anything else is a disk that refuses
+    // and must be heard, not an identity that was never saved.
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
 }
 

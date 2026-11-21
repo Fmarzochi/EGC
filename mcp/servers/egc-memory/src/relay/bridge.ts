@@ -5,8 +5,6 @@ import type { RawData } from 'ws';
 
 import { resolveHome } from '../home';
 import { MEMORY_CHANGED_KIND, parseMemoryChange, scheduleMemoryPull } from '../memory-notify';
-import { machineKeys, receiveStateEnvelope, sealStateDocument } from './state-envelope';
-import type { MachineKeys } from './state-envelope';
 import {
   forgetRemoteMachine,
   listLiveSessions,
@@ -233,7 +231,7 @@ export class MeshBridge {
     // is up yet or not. The boundary is the time of this start, taken here
     // and now, not a snapshot of the queue read later: an event written while
     // the bridge starts is after the boundary and leaves.
-    if (this.startedAt === null) this.startedAt = new Date(this.now()).toISOString();
+    this.startedAt ??= new Date(this.now()).toISOString();
     this.connect();
   }
 
@@ -300,7 +298,7 @@ export class MeshBridge {
   // look: direct events for their sessions, broadcasts, and a change in the
   // locks this machine holds, told at once instead of with the next presence.
   async forward(): Promise<void> {
-    if (this.forwardRun || !this.connected) return;
+    if (this.forwardRun !== null || !this.connected) return;
     this.forwardRun = this.forwardOnce().finally(() => {
       this.forwardRun = null;
     });
@@ -498,28 +496,14 @@ export class MeshBridge {
       await recordRemoteLocks(this.options.db, from, Array.isArray(locks) ? locks : []);
       return;
     }
-    if (type === 'state-envelope') {
-      this.applyStateEnvelope(from, body);
-      return;
-    }
-    if (type === 'event') await this.applyEvent(body);
-  }
-
-  // A sealed state document another machine sent: merged into the state of
-  // this machine, or refused with the reason in the log.
-  private applyStateEnvelope(from: string, body: unknown): void {
-    const outcome = receiveStateEnvelope(this.options.home, this.keys, this.options.teamKey, body);
-    if (!outcome) return;
-    if (outcome.merged > 0) this.log(`mesh: state from ${from.slice(0, 8)} merged into this machine`);
-    if (outcome.rejected.length > 0) this.log(`mesh: state from ${from.slice(0, 8)} refused: ${outcome.rejected.join(', ')}`);
-  }
-
-  // An event for a session here, filed on the bus. Memory changed on another
-  // machine: the sessions here will read the notice from the bus, and the
-  // state it speaks of is pulled first.
-  private async applyEvent(body: unknown): Promise<void> {
+    if (type !== 'event') return;
     const filed = await recordInboundEvent(this.options.db, body, this.now());
-    if (filed && (body as Partial<SharedEvent> | undefined)?.kind === MEMORY_CHANGED_KIND) scheduleMemoryPull();
+    // Memory changed on another machine: the sessions here will read the
+    // notice from the bus, and when it speaks of state, the team state is
+    // pulled first; the other kinds of memory do not travel with the sync
+    // yet, so they pull nothing.
+    const event = body as Partial<SharedEvent> | undefined;
+    if (filed && event?.kind === MEMORY_CHANGED_KIND && parseMemoryChange(event.payload)?.kind === 'state') scheduleMemoryPull();
   }
 
   // Each tick sends the presence, sweeps the machines that fell silent and
