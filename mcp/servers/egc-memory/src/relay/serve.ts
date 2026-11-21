@@ -2,6 +2,8 @@ import fs from 'node:fs';
 
 import { parseTeamKey } from '../sync/envelope';
 import { TEAM_CONFIG_PATH, getTeamConfig } from '../sync/TeamSync';
+import { announceCentral } from './discovery';
+import type { Announcement } from './discovery';
 import { startHub } from './hub';
 import { DEFAULT_MESH_PORT, meshAuthKey } from './protocol';
 
@@ -12,9 +14,9 @@ import { DEFAULT_MESH_PORT, meshAuthKey } from './protocol';
 // The machine that runs this command does hold the team key, so it is a
 // machine of the person's own; the credential that lets a rented server
 // hold the challenge key alone comes with the guide of that option.
-export interface ServeArgs { port: number; host: string }
+export interface ServeArgs { port: number; host: string; announce: boolean }
 
-export const SERVE_USAGE = 'Usage: egc mesh serve [--port <0-65535>, default 47470] [--host <address>, default 0.0.0.0]';
+export const SERVE_USAGE = 'Usage: egc mesh serve [--port <0-65535>, default 47470] [--host <address>, default 0.0.0.0] [--no-announce]';
 
 function parsePort(value: string | undefined): number | null {
   if (value === undefined || !/^\d{1,5}$/.test(value)) return null;
@@ -24,10 +26,13 @@ function parsePort(value: string | undefined): number | null {
 
 // The options, or the message that says what is wrong with them.
 export function parseServeArgs(argv: readonly string[]): ServeArgs | string {
-  const args: ServeArgs = { port: DEFAULT_MESH_PORT, host: '0.0.0.0' };
+  const args: ServeArgs = { port: DEFAULT_MESH_PORT, host: '0.0.0.0', announce: true };
   for (let i = 0; i < argv.length; i += 2) {
     const value = argv[i + 1];
-    if (argv[i] === '--port') {
+    if (argv[i] === '--no-announce') {
+      args.announce = false;
+      i -= 1;
+    } else if (argv[i] === '--port') {
       const port = parsePort(value);
       if (port === null) return `--port takes a number from 0 to 65535.\n${SERVE_USAGE}`;
       args.port = port;
@@ -67,8 +72,21 @@ export async function main(argv: readonly string[]): Promise<void> {
     return;
   }
   process.stdout.write(`EGC mesh central listening on ${hub.host}:${hub.port}\n`);
+  // On the home network the central says where it is, so a machine of the
+  // team runs `egc mesh connect` with no address; a central behind a VPN or
+  // on a server, where multicast does not travel, is reached by its address.
+  let announcement: Announcement | null = null;
+  if (args.announce) {
+    try {
+      announcement = announceCentral({ port: hub.port, teamKey });
+      process.stdout.write(`Announced on the local network as ${announcement.name} (_egc-mesh._tcp); egc mesh connect with no address finds it from a machine of the team.\n`);
+    } catch (error) {
+      process.stderr.write(`The central is not announced on the local network: ${error instanceof Error ? error.message : String(error)}\n`);
+    }
+  }
   const stop = (): void => {
-    hub.close().then(() => process.exit(0), () => process.exit(1));
+    const quiet = announcement ? announcement.stop() : Promise.resolve();
+    quiet.finally(() => hub.close().then(() => process.exit(0), () => process.exit(1)));
   };
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);

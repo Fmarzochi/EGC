@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
+    "bonjour-service": "^1.4.4",
     "simple-git": "^4.0.2",
     "sqlite": "^5.1.1",
     "sqlite3": "^6.0.1",
