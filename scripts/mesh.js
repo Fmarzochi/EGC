@@ -5,7 +5,6 @@
 // runs the central that relays between them in the foreground; it lives in
 // the built memory server, which the machines' bridges share it with.
 
-const fs = require('node:fs');
 const USAGE = [
   'Usage: egc mesh <serve [--port <n>] [--host <address>] [--no-announce] | connect [<address>] | find | disconnect | status | label <name>>',
   '',
