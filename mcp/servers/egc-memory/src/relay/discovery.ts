@@ -25,10 +25,19 @@ export interface Announcement {
   stop(): Promise<void>;
 }
 
-export function announceCentral(options: { port: number; teamKey: Buffer; name?: string }): Announcement {
-  const bonjour = new Bonjour();
+function asError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+// The announcement is optional for the central: an error of the mDNS
+// socket or of the record, which arrives later, goes to `onError` and the
+// central keeps serving.
+export function announceCentral(options: { port: number; teamKey: Buffer; name?: string; onError?: (error: Error) => void }): Announcement {
+  const onError = options.onError ?? ((): void => undefined);
+  const bonjour = new Bonjour({}, (error: unknown) => onError(asError(error)));
   const name = (options.name ?? `EGC mesh on ${os.hostname().split('.')[0] || 'machine'}`).slice(0, MAX_SERVICE_NAME);
-  bonjour.publish({ name, type: MESH_SERVICE_TYPE, protocol: 'tcp', port: options.port, txt: { team: teamTag(options.teamKey), v: '1' } });
+  const service = bonjour.publish({ name, type: MESH_SERVICE_TYPE, protocol: 'tcp', port: options.port, txt: { team: teamTag(options.teamKey), v: '1' } });
+  service.on('error', (error: unknown) => onError(asError(error)));
   return {
     name,
     stop: () => new Promise<void>(resolve => {
@@ -66,23 +75,31 @@ function pickAddress(service: Service): string | null {
   return v6 ? `[${v6}]` : null;
 }
 
+// A port a central can listen on: a TCP port, never 0.
+function usablePort(port: unknown): port is number {
+  return Number.isInteger(port) && (port as number) >= 1 && (port as number) <= 65535;
+}
+
 // The centrals of this team that answered on the local network within the
 // timeout, by address; a central of another team, or one that gave no
-// address, is not listed.
+// address or no usable port, is not listed. A failure of the search itself
+// is thrown when nothing was found, so the person learns why.
 export async function discoverCentrals(options: { teamKey: Buffer; timeoutMs?: number }): Promise<FoundCentral[]> {
   const tag = teamTag(options.teamKey);
-  const bonjour = new Bonjour();
+  let failure: Error | null = null;
+  const bonjour = new Bonjour({}, (error: unknown) => { failure ??= asError(error); });
   const found = new Map<string, FoundCentral>();
   const browser = bonjour.find({ type: MESH_SERVICE_TYPE, protocol: 'tcp' }, (service: Service) => {
     const txt = (service.txt ?? {}) as Record<string, unknown>;
     if (txt.team !== tag) return;
     const host = pickAddress(service);
-    if (!host || !Number.isInteger(service.port)) return;
+    if (!host || !usablePort(service.port)) return;
     const address = `${host}:${service.port}`;
     found.set(address, { name: service.name, host: service.host, port: service.port, address });
   });
   await new Promise(resolve => setTimeout(resolve, options.timeoutMs ?? DISCOVERY_TIMEOUT_MS));
   browser.stop();
   bonjour.destroy();
+  if (found.size === 0 && failure) throw failure;
   return [...found.values()].sort((left, right) => left.address.localeCompare(right.address));
 }

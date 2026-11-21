@@ -16,6 +16,8 @@ import { DEFAULT_MESH_PORT, meshAuthKey } from './protocol';
 // hold the challenge key alone comes with the guide of that option.
 export interface ServeArgs { port: number; host: string; announce: boolean }
 
+const WILDCARD_HOSTS = new Set(['0.0.0.0', '::', '[::]']);
+
 export const SERVE_USAGE = 'Usage: egc mesh serve [--port <0-65535>, default 47470] [--host <address>, default 0.0.0.0] [--no-announce]';
 
 function parsePort(value: string | undefined): number | null {
@@ -75,10 +77,14 @@ export async function main(argv: readonly string[]): Promise<void> {
   // On the home network the central says where it is, so a machine of the
   // team runs `egc mesh connect` with no address; a central behind a VPN or
   // on a server, where multicast does not travel, is reached by its address.
+  // An announcement names every address of the machine, so a central bound
+  // to one address alone is not announced: it is reached by that address.
   let announcement: Announcement | null = null;
-  if (args.announce) {
+  if (args.announce && !WILDCARD_HOSTS.has(args.host)) {
+    process.stdout.write(`Bound to ${args.host} alone, the central is not announced on the local network: from a machine of the team, egc mesh connect ${args.host}:${hub.port}.\n`);
+  } else if (args.announce) {
     try {
-      announcement = announceCentral({ port: hub.port, teamKey });
+      announcement = announceCentral({ port: hub.port, teamKey, onError: error => process.stderr.write(`The announcement on the local network failed, and the central keeps serving: ${error.message}\n`) });
       process.stdout.write(`Announced on the local network as ${announcement.name} (_egc-mesh._tcp); egc mesh connect with no address finds it from a machine of the team.\n`);
     } catch (error) {
       process.stderr.write(`The central is not announced on the local network: ${error instanceof Error ? error.message : String(error)}\n`);
@@ -86,7 +92,7 @@ export async function main(argv: readonly string[]): Promise<void> {
   }
   const stop = (): void => {
     const quiet = announcement ? announcement.stop() : Promise.resolve();
-    quiet.finally(() => hub.close().then(() => process.exit(0), () => process.exit(1)));
+    quiet.catch(() => undefined).then(() => hub.close()).then(() => process.exit(0), () => process.exit(1));
   };
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);

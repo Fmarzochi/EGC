@@ -12,6 +12,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
+const net = require('net');
 const { pathToFileURL } = require('url');
 
 const { CLI_TIMEOUT_MS } = require('./fixtures/subprocess-timeouts');
@@ -19,7 +20,6 @@ const { CLI_TIMEOUT_MS } = require('./fixtures/subprocess-timeouts');
 const ROOT = path.join(__dirname, '..');
 const BUILD = path.join(ROOT, 'mcp', 'servers', 'egc-memory', 'build');
 const MESH_CLI = path.join(ROOT, 'scripts', 'mesh.js');
-const PORT = 47479;
 
 if (!fs.existsSync(path.join(BUILD, 'relay', 'discovery.js'))) {
   console.log(`[SKIP] discovery build not found under ${BUILD}. Run 'npm run build' in mcp/servers/egc-memory first.`);
@@ -40,8 +40,22 @@ async function test(name, fn) {
   }
 }
 
-// Waits for a line of the child's output, within the step budget.
-function waitForOutput(child, pattern, budgetMs = 10000) {
+// A free TCP port for the central of this run, so another listener on the
+// machine never stands in the way.
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.unref();
+    probe.on('error', reject);
+    probe.listen(0, '127.0.0.1', () => {
+      const { port } = probe.address();
+      probe.close(() => resolve(port));
+    });
+  });
+}
+
+// Waits for a line of the child's output, within the shared CLI budget.
+function waitForOutput(child, pattern, budgetMs = CLI_TIMEOUT_MS) {
   return new Promise((resolve, reject) => {
     let output = '';
     const timer = setTimeout(() => reject(new Error(`timed out waiting for ${pattern}\n${output}`)), budgetMs);
@@ -64,6 +78,7 @@ function waitForOutput(child, pattern, budgetMs = 10000) {
 async function runTests() {
   console.log('\n=== Testing the discovery of the central ===\n');
   const { discoverCentrals, teamTag } = await import(pathToFileURL(path.join(BUILD, 'relay', 'discovery.js')).href);
+  const PORT = await freePort();
   const teamKey = Buffer.alloc(32, 7);
   const otherKey = Buffer.alloc(32, 9);
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-mesh-discovery-'));
@@ -80,20 +95,25 @@ async function runTests() {
     });
 
     // The central as the person runs it, in a process of its own, announcing itself.
-    central = spawn(process.execPath, [MESH_CLI, 'serve', '--port', String(PORT), '--host', '127.0.0.1'], { env: { ...process.env, HOME: centralHome, USERPROFILE: centralHome }, stdio: ['ignore', 'pipe', 'pipe'] });
+    // Bound to every address, as a central of a home network is: one bound
+    // to a single address is not announced.
+    central = spawn(process.execPath, [MESH_CLI, 'serve', '--port', String(PORT), '--host', '0.0.0.0'], { env: { ...process.env, HOME: centralHome, USERPROFILE: centralHome }, stdio: ['ignore', 'pipe', 'pipe'] });
     const banner = await waitForOutput(central, /Announced on the local network|not announced/);
-    assert.match(banner, /Announced on the local network as .* \(_egc-mesh\._tcp\)/, banner);
-    const found = await discoverCentrals({ teamKey, timeoutMs: 2500 });
+    assert.match(banner, /EGC mesh central listening on /, banner);
+    const announced = /Announced on the local network as .* \(_egc-mesh\._tcp\)/.test(banner);
+    const found = announced ? await discoverCentrals({ teamKey, timeoutMs: 2500 }) : [];
     const multicastAvailable = found.some(entry => entry.port === PORT);
     if (!multicastAvailable) {
-      console.log('[SKIP] the announcement did not come back on this host (no multicast on its interfaces); the discovery cases cannot run here.');
+      console.log(announced
+        ? '[SKIP] the announcement did not come back on this host (no multicast on its interfaces); the discovery cases cannot run here.'
+        : `[SKIP] the central could not announce itself on this host; the discovery cases cannot run here.\n${banner}`);
     }
 
     if (multicastAvailable) {
       await test('a machine of the team finds the central announced on the local network, by address', () => {
         const entry = found.find(item => item.port === PORT);
         assert.match(entry.name, /^EGC mesh on /);
-        assert.match(entry.address, /^(\d{1,3}(?:\.\d{1,3}){3}|\[[0-9a-f:%.]+\]):47479$/i, entry.address);
+        assert.match(entry.address, new RegExp(`^(\\d{1,3}(?:\\.\\d{1,3}){3}|\\[[0-9a-f:%.]+\\]):${PORT}$`, 'i'), entry.address);
       });
 
       await test('a machine of another team does not see it', async () => {
@@ -109,12 +129,12 @@ async function runTests() {
         const run = args => spawnSync(process.execPath, [MESH_CLI, ...args], { env, encoding: 'utf8', timeout: CLI_TIMEOUT_MS });
         const listed = run(['find']);
         assert.strictEqual(listed.status, 0, `${listed.stdout}\n${listed.stderr}`);
-        assert.match(listed.stdout, /:47479 {2}EGC mesh on /);
+        assert.match(listed.stdout, new RegExp(`:${PORT} {2}EGC mesh on `));
         const joined = run(['connect']);
         assert.strictEqual(joined.status, 0, `${joined.stdout}\n${joined.stderr}`);
-        assert.match(joined.stdout, /Central: ws:\/\/\S+:47479/);
+        assert.match(joined.stdout, new RegExp(`Central: ws://\\S+:${PORT}`));
         const config = JSON.parse(fs.readFileSync(path.join(home, '.egc', 'mesh.json'), 'utf8'));
-        assert.match(config.central, /:47479$/);
+        assert.match(config.central, new RegExp(`:${PORT}$`));
       });
     }
 

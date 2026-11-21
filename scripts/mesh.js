@@ -133,7 +133,14 @@ async function findCentrals() {
     return null;
   }
   process.stdout.write('Looking for the central of your team on the local network (3 s)...\n');
-  const found = await discovery.discoverCentrals({ teamKey });
+  let found;
+  try {
+    found = await discovery.discoverCentrals({ teamKey });
+  } catch (error) {
+    process.stderr.write(`The local network could not be searched: ${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
+    return null;
+  }
   if (found.length === 0) {
     process.stdout.write('No central of your team answered on this network. Start one with `egc mesh serve`, or give its address: egc mesh connect <host:port>.\n');
     return found;
