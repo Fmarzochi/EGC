@@ -50,6 +50,9 @@ export interface RecordsStaging {
 export interface RecordsMerge {
   opened: number;
   merged: number;
+  // Records opened and left as they were: already here, or no later than
+  // the row they met.
+  unchanged: number;
   // Verified records of working memory found expired: ignored, and removed
   // from the tree by the staging that follows.
   expired: string[];
@@ -127,9 +130,12 @@ export const SAME_PROJECT_SQL = '((project_key IS NOT NULL AND project_key = ?) 
 
 // One row per key for a repository, whatever the folder: a write lands on
 // the row the repository has here already, under the folder it was first
-// written under, or opens a new one. With newerOnly, a write no later than
-// the row stays out; a row written before the write time existed (0) yields.
-export async function upsertWorkingMemory(db: Database, entry: WorkingMemoryWrite, newerOnly: boolean): Promise<boolean> {
+// written under, or opens a new one. A write of this machine names the
+// repository its path belongs to now. A record from another machine
+// (remote) comes only when written later than the row (a row written before
+// the write time existed, 0, yields) and leaves the key of the row when it
+// carries none. False when the row was left as it was.
+export async function upsertWorkingMemory(db: Database, entry: WorkingMemoryWrite, remote: boolean): Promise<boolean> {
   const local = await db.get<{ project_path: string; updated_at: number }>(
     `SELECT project_path, updated_at FROM working_memory WHERE key = ? AND ${SAME_PROJECT_SQL} ORDER BY updated_at DESC, expires_at DESC LIMIT 1`,
     [entry.key, entry.projectKey, entry.projectPath]
@@ -141,9 +147,10 @@ export async function upsertWorkingMemory(db: Database, entry: WorkingMemoryWrit
     );
     return true;
   }
-  if (newerOnly && entry.updatedAt <= local.updated_at) return false;
+  if (remote && entry.updatedAt <= local.updated_at) return false;
+  const projectKey = remote ? 'COALESCE(?, project_key)' : '?';
   await db.run(
-    'UPDATE working_memory SET value = ?, expires_at = ?, project_key = COALESCE(project_key, ?), machine_label = ?, updated_at = ? WHERE project_path = ? AND key = ?',
+    `UPDATE working_memory SET value = ?, expires_at = ?, project_key = ${projectKey}, machine_label = ?, updated_at = ? WHERE project_path = ? AND key = ?`,
     [entry.value, entry.expiresAt, entry.projectKey, entry.machine, entry.updatedAt, local.project_path, entry.key]
   );
   return true;
@@ -220,8 +227,16 @@ function linkOnTheWay(target: string, root: string): string | null {
 type SealedState = 'absent' | 'same' | 'different' | 'unopened' | 'not-a-file';
 
 function sealedState(target: string, plaintext: string, teamKey: Buffer, relativePath: string): SealedState {
-  if (!isLink(target) && !fs.existsSync(target)) return 'absent';
-  if (!isRegularFile(target)) return 'not-a-file';
+  let stat: fs.Stats;
+  try {
+    stat = fs.lstatSync(target);
+  } catch {
+    return 'absent';
+  }
+  if (!stat.isFile()) return 'not-a-file';
+  // A file past the size a sealed record may have is not read: whatever it
+  // is, it is not this record, and the record written over it is within the cap.
+  if (stat.size > MAX_SEALED_RECORD_BYTES) return 'different';
   try {
     const opened = openEnvelope(fs.readFileSync(target, 'utf8'), teamKey, relativePath);
     if (opened === null) return 'unopened';
@@ -270,13 +285,14 @@ function stageOne(record: SyncRecord, context: StageContext): StageOutcome {
 }
 
 // The files of verified records the merge found expired: they leave the
-// tree, and the push carries the removal. A file that will not go now goes
-// with the next sync.
-function removeExpired(paths: readonly string[], context: StageContext): number {
+// tree before the records of this machine are sealed, and never at a path a
+// live record of this machine is about to take; the push carries the
+// removal. A file that will not go now goes with the next sync.
+function removeExpired(paths: readonly string[], live: ReadonlySet<string>, context: StageContext): number {
   let removed = 0;
   for (const relativePath of paths) {
     const target = path.join(context.recordsDir, relativePath);
-    if (linkOnTheWay(target, context.root) || !isRegularFile(target)) continue;
+    if (live.has(relativePath) || linkOnTheWay(target, context.root) || !isRegularFile(target)) continue;
     try {
       fs.unlinkSync(target);
       removed += 1;
@@ -293,6 +309,7 @@ function removeExpired(paths: readonly string[], context: StageContext): number 
 export function stageRecords(records: readonly SyncRecord[], recordsDir: string, teamKey: Buffer, options: RecordsOptions = {}): RecordsStaging {
   const context: StageContext = { recordsDir, root: options.root ?? path.dirname(recordsDir), teamKey, options };
   const outcome: RecordsStaging = { staged: 0, written: 0, removed: 0, refused: [] };
+  outcome.removed = removeExpired(options.expired ?? [], new Set(records.map(recordPath)), context);
   for (const record of records) {
     const staged = stageOne(record, context);
     if ('refusal' in staged) {
@@ -302,7 +319,6 @@ export function stageRecords(records: readonly SyncRecord[], recordsDir: string,
     outcome.staged += 1;
     if (staged.written) outcome.written += 1;
   }
-  outcome.removed = removeExpired(options.expired ?? [], context);
   return outcome;
 }
 
@@ -338,18 +354,20 @@ async function mergeLesson(db: Database, record: SyncRecord): Promise<boolean> {
   return true;
 }
 
-async function mergeDecision(db: Database, record: SyncRecord): Promise<boolean> {
+// What became of one record: written, left as it was (here already, or no
+// later than the row it met), expired on the way, or no record at all.
+type MergeOutcome = 'merged' | 'unchanged' | 'expired' | 'rejected';
+
+async function mergeDecision(db: Database, record: SyncRecord): Promise<MergeOutcome> {
   const body = record.body;
   const timestamp = text(body.timestamp);
-  if (!timestamp || (!text(body.decision) && !text(body.context))) return false;
-  await db.run(
+  if (!timestamp || (!text(body.decision) && !text(body.context))) return 'rejected';
+  const result = await db.run(
     'INSERT INTO decisions (record_id, context, decision, timestamp, project_path, project_key, machine_label) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(record_id) DO NOTHING',
     [record.id, text(body.context), text(body.decision), timestamp, text(body.projectPath), text(body.projectKey), record.machine]
   );
-  return true;
+  return (result.changes ?? 0) > 0 ? 'merged' : 'unchanged';
 }
-
-type MergeOutcome = 'merged' | 'expired' | 'rejected';
 
 async function mergeWorkingMemory(db: Database, record: SyncRecord, now: number): Promise<MergeOutcome> {
   const body = record.body;
@@ -362,8 +380,8 @@ async function mergeWorkingMemory(db: Database, record: SyncRecord, now: number)
   if (expiresAt <= Math.floor(now / 1000)) return 'expired';
   // Onto the row this repository has here, whatever its folder, and only
   // when written later than it.
-  await upsertWorkingMemory(db, { projectPath, projectKey: text(body.projectKey), key, value, expiresAt, updatedAt: number(body.updatedAt) ?? 0, machine: record.machine }, true);
-  return 'merged';
+  const written = await upsertWorkingMemory(db, { projectPath, projectKey: text(body.projectKey), key, value, expiresAt, updatedAt: number(body.updatedAt) ?? 0, machine: record.machine }, true);
+  return written ? 'merged' : 'unchanged';
 }
 
 interface RecordEntry { kind: RecordKind; dir: string; name: string; relativePath: string }
@@ -434,7 +452,7 @@ export async function mergeRecords(db: Database, recordsDir: string, teamKey: Bu
   const now = options.now?.() ?? Date.now();
   const enqueue = options.enqueue ?? (<T>(work: () => Promise<T>): Promise<T> => work());
   const listed = listRecordEntries(recordsDir, options.root ?? path.dirname(recordsDir));
-  const outcome: RecordsMerge = { opened: 0, merged: 0, expired: [], rejected: [...listed.rejected], unopened: [] };
+  const outcome: RecordsMerge = { opened: 0, merged: 0, unchanged: 0, expired: [], rejected: [...listed.rejected], unopened: [] };
   await Promise.all(listed.entries.map(entry => openRecord(entry, teamKey)).map(async opened => {
     if ('unopened' in opened) {
       outcome.unopened.push(opened.unopened);
@@ -447,6 +465,7 @@ export async function mergeRecords(db: Database, recordsDir: string, teamKey: Bu
     outcome.opened += 1;
     const merged = await enqueue(() => mergeOne(db, opened.record, now));
     if (merged === 'merged') outcome.merged += 1;
+    else if (merged === 'unchanged') outcome.unchanged += 1;
     else if (merged === 'expired') outcome.expired.push(recordPath(opened.record));
     else outcome.rejected.push(recordPath(opened.record));
   }));
@@ -455,6 +474,6 @@ export async function mergeRecords(db: Database, recordsDir: string, teamKey: Bu
 
 async function mergeOne(db: Database, record: SyncRecord, now: number): Promise<MergeOutcome> {
   if (record.kind === 'lesson') return (await mergeLesson(db, record)) ? 'merged' : 'rejected';
-  if (record.kind === 'decision') return (await mergeDecision(db, record)) ? 'merged' : 'rejected';
+  if (record.kind === 'decision') return mergeDecision(db, record);
   return mergeWorkingMemory(db, record, now);
 }
