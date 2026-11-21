@@ -101,6 +101,8 @@ async function runTests() {
   const b = await machine('home-b');
   const projectOnA = checkoutOf(path.join(root, 'work-a', 'app'));
   const projectOnB = checkoutOf(path.join(root, 'work-b', 'app'));
+  // A second checkout of the same repository on machine A.
+  const projectOnA2 = checkoutOf(path.join(root, 'work-a2', 'app'));
   const bridges = [];
   const handles = [];
   const bridgeFor = (m, extra = {}) => {
@@ -115,6 +117,13 @@ async function runTests() {
       assert.ok(a.identity.label.length > 0);
       assert.deepStrictEqual(loadOrCreateMachine(a.home), a.identity, 'a second load reads the same identity');
       assert.notStrictEqual(a.identity.id, b.identity.id, 'two homes are two machines');
+      const damaged = path.join(root, 'home-damaged');
+      fs.mkdirSync(path.join(damaged, '.egc'), { recursive: true });
+      fs.writeFileSync(path.join(damaged, '.egc', 'machine.json'), '{not an identity');
+      const recovered = loadOrCreateMachine(damaged);
+      assert.match(recovered.id, /^[0-9a-f]{32}$/, 'a damaged file is replaced by a fresh identity');
+      assert.deepStrictEqual(loadOrCreateMachine(damaged), recovered, 'and the replacement is the one kept');
+      assert.ok(fs.readdirSync(path.join(damaged, '.egc')).some(name => name.startsWith('machine.json.damaged.')), 'the damaged file was set aside, not overwritten');
     });
 
     const bridgeA = bridgeFor(a);
@@ -154,9 +163,13 @@ async function runTests() {
       const handoff = received.find(event => event.kind === 'handoff');
       assert.strictEqual(handoff.from_session, 'tab-on-a');
       assert.strictEqual(handoff.payload, 'take the parser');
+      await bus.announce(a.db, { sessionId: 'tab-on-a2', projectPath: projectOnA2, territory: 'the other checkout' });
       const broadcast = await bus.sendEvent(b.db, { fromSession: 'tab-on-b', projectPath: projectOnB, kind: 'notice', payload: 'to everyone' });
       assert.strictEqual(broadcast.ok, true);
       await until(async () => (await bus.readEvents(a.db, { sessionId: 'tab-on-a', projectPath: projectOnA })).some(event => event.kind === 'notice'), 'the broadcast to reach A');
+      await until(async () => (await bus.readEvents(a.db, { sessionId: 'tab-on-a2', projectPath: projectOnA2 })).some(event => event.kind === 'notice'), 'the broadcast to reach the other checkout of the repository on A');
+      const { events: outboundAgain } = await bus.listOutboundEvents(a.db, 0, null);
+      assert.ok(!outboundAgain.some(event => event.kind === 'notice'), 'an event that came in from B never goes out of A again');
       const refused = await bus.sendEvent(a.db, { fromSession: 'tab-on-a', toSession: 'nobody-anywhere', projectPath: projectOnA, kind: 'x' });
       assert.strictEqual(refused.ok, false, 'a session on no machine is still refused');
     });
@@ -265,6 +278,10 @@ async function runTests() {
       assert.strictEqual(bad.status, 2);
       assert.match(bad.stderr, /Not an address of a mesh central/);
       assert.strictEqual(run(['connect', 'https://central:47470']).status, 2, 'an address with another scheme is refused');
+      const bare = run(['connect', 'central.local']);
+      assert.strictEqual(bare.status, 0, bare.stderr);
+      assert.match(bare.stdout, /Central: ws:\/\/central\.local:47470/, 'a host alone gets the port of the central');
+      assert.strictEqual(run(['connect', 'wss://alice:secret@central.local:47470']).status, 2, 'credentials in the address are refused');
       const ok = run(['connect', '192.168.1.50:47470']);
       assert.strictEqual(ok.status, 0, ok.stderr);
       assert.match(ok.stdout, /Central: ws:\/\/192\.168\.1\.50:47470/);

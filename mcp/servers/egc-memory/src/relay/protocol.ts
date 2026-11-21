@@ -197,4 +197,10 @@ export class ReplayGuard {
     this.seen.set(id, ts);
     return true;
   }
+
+  // A box accepted here whose durable record failed is forgotten, so the
+  // central's next copy of it, if any, is not refused as a repeat.
+  forget(id: string): void {
+    this.seen.delete(id);
+  }
 }

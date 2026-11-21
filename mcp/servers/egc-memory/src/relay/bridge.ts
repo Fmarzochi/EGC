@@ -6,7 +6,6 @@ import type { RawData } from 'ws';
 import { resolveHome } from '../home';
 import {
   forgetRemoteMachine,
-  latestEventId,
   listLiveSessions,
   listOutboundEvents,
   listRemoteSessions,
@@ -16,6 +15,7 @@ import {
   recordRemotePresence,
   rememberBox,
   sweepRemoteMachines,
+  withBusTransaction,
 } from '../session-bus';
 import type { BusDb, RemoteSession, SharedEvent, SharedLock } from '../session-bus';
 import { parseTeamKey } from '../sync/envelope';
@@ -67,6 +67,9 @@ export interface BridgeOptions {
   now?: () => number;
   log?: (line: string) => void;
   onMessage?: (from: string, message: MeshMessage) => void;
+  // The write arbiter of the server, when the bridge runs inside one: what
+  // the bridge writes to the bus then takes its turn with the other writers.
+  enqueue?: <T>(work: () => Promise<T>) => Promise<T>;
 }
 
 export interface BridgeStatus {
@@ -183,10 +186,11 @@ export class MeshBridge {
   // What left already: the last bus event forwarded, and the locks last
   // told; the cursor starts at the top of the queue, so a bridge that
   // starts never replays what the machine said before it existed.
-  private forwardCursor: number | null = null;
-  private cursorReady: Promise<void> = Promise.resolve();
+  private forwardCursor = 0;
+  private startedAt: string | null = null;
   private lastLocksSent = '';
-  private forwarding = false;
+  private forwardRun: Promise<void> | null = null;
+  private inboundChain: Promise<void> | null = null;
   private readonly replay: ReplayGuard;
   private readonly authKey: Buffer;
   private readonly sealKey: Buffer;
@@ -220,20 +224,17 @@ export class MeshBridge {
     this.stopped = false;
     // What the bus held before the bridge existed stays on this machine;
     // everything queued from this moment on leaves, whether the connection
-    // is up yet or not, so nothing said while the central is being reached
-    // is lost to the first look.
-    this.cursorReady = latestEventId(this.options.db)
-      .then(id => {
-        if (this.forwardCursor === null) this.forwardCursor = id;
-      })
-      .catch(() => {
-        if (this.forwardCursor === null) this.forwardCursor = 0;
-      });
+    // is up yet or not. The boundary is the time of this start, taken here
+    // and now, not a snapshot of the queue read later: an event written while
+    // the bridge starts is after the boundary and leaves.
+    if (this.startedAt === null) this.startedAt = new Date(this.now()).toISOString();
     this.connect();
   }
 
   // The status file says "not connected" from the first moment of the stop,
-  // before the socket is closed, which can take up to a second.
+  // before the socket is closed, which can take up to a second. What the
+  // bridge was writing to the bus when the stop came is finished first, so
+  // the database is never closed under it.
   async stop(): Promise<void> {
     this.stopped = true;
     this.clearTimers();
@@ -250,8 +251,17 @@ export class MeshBridge {
     } else if (socket) {
       socket.terminate();
     }
+    await this.settleInFlight();
     this.connected = false;
     this.writeStatus();
+  }
+
+  private async settleInFlight(): Promise<void> {
+    const pending = [this.inboundChain, this.forwardRun].filter((work): work is Promise<void> => work !== null);
+    await Promise.race([
+      Promise.allSettled(pending),
+      new Promise<void>(resolve => setTimeout(resolve, 5000).unref()),
+    ]);
   }
 
   status(): BridgeStatus {
@@ -284,35 +294,41 @@ export class MeshBridge {
   // look: direct events for their sessions, broadcasts, and a change in the
   // locks this machine holds, told at once instead of with the next presence.
   async forward(): Promise<void> {
-    if (this.forwarding || !this.connected) return;
-    this.forwarding = true;
-    try {
-      await this.cursorReady;
-      const { lastId, events } = await listOutboundEvents(this.options.db, this.forwardCursor ?? 0, this.now());
-      if (events.length > 0) {
-        const remote = await listRemoteSessions(this.options.db, undefined, this.now());
-        for (const event of events) this.forwardEvent(event, remote);
+    if (this.forwardRun || !this.connected) return;
+    this.forwardRun = this.forwardOnce().finally(() => {
+      this.forwardRun = null;
+    });
+    await this.forwardRun;
+  }
+
+  // The cursor moves past an event only once the central has it: a
+  // connection that closes mid-way leaves the cursor on the last event sent,
+  // and the rest goes out after the reconnection.
+  private async forwardOnce(): Promise<void> {
+    const { lastId, events } = await listOutboundEvents(this.options.db, this.forwardCursor, this.startedAt);
+    if (events.length > 0) {
+      const remote = await listRemoteSessions(this.options.db, undefined, this.now());
+      for (const event of events) {
+        if (!this.forwardEvent(event, remote)) return;
+        this.forwardCursor = event.event_id;
       }
-      this.forwardCursor = lastId;
-      const locks = await listSharedLocks(this.options.db, this.now());
-      const key = JSON.stringify(locks);
-      if (key !== this.lastLocksSent) {
-        this.lastLocksSent = key;
-        const body: LocksBody = { locks };
-        this.send(BROADCAST, { type: 'locks', body });
-      }
-    } finally {
-      this.forwarding = false;
+    }
+    this.forwardCursor = lastId;
+    const locks = await listSharedLocks(this.options.db, this.now());
+    const key = JSON.stringify(locks);
+    if (key !== this.lastLocksSent) {
+      const body: LocksBody = { locks };
+      if (this.send(BROADCAST, { type: 'locks', body })) this.lastLocksSent = key;
     }
   }
 
-  private forwardEvent(event: SharedEvent, remote: Record<string, unknown>[]): void {
-    if (event.to_session === null) {
-      this.send(BROADCAST, { type: 'event', body: event });
-      return;
-    }
+  // True when the event is behind us: handed to the central, or addressed to
+  // a session no machine online holds, which nobody could deliver.
+  private forwardEvent(event: SharedEvent, remote: Record<string, unknown>[]): boolean {
+    if (event.to_session === null) return this.send(BROADCAST, { type: 'event', body: event });
     const target = remote.find(row => row.id === event.to_session);
-    if (target && typeof target.machine_id === 'string') this.send(target.machine_id, { type: 'event', body: event });
+    if (!target || typeof target.machine_id !== 'string') return true;
+    return this.send(target.machine_id, { type: 'event', body: event });
   }
 
   // Seals a message for one machine or for all of them and hands it to the
@@ -344,6 +360,10 @@ export class MeshBridge {
       return;
     }
     this.socket = socket;
+    // The status file is refreshed with every connection attempt, so a
+    // bridge that is reconnecting through a long outage of the central is
+    // still reported as alive, and as reconnecting.
+    this.writeStatus();
     // The frames of a connection are handled one after the other, in the
     // order the central sent them: a presence that is being written to the
     // bus while the central says the same machine left would otherwise land
@@ -357,6 +377,7 @@ export class MeshBridge {
       inbound = inbound
         .then(() => (this.socket === socket ? this.onFrame(raw, socket) : undefined))
         .catch(error => this.log(`mesh: a frame was not handled: ${error instanceof Error ? error.message : String(error)}`));
+      this.inboundChain = inbound;
     });
     socket.on('close', code => this.onClose(socket, code));
     socket.on('error', error => this.log(`mesh: connection error: ${error.message}`));
@@ -402,15 +423,28 @@ export class MeshBridge {
   // keeps the window of the timestamps. The durable record comes first: a
   // box the database could not record is not marked as seen, so nothing is
   // lost to a write that failed.
+  // A box is taken and applied as one: the id is recorded and what the box
+  // said is written in one transaction, serialized with the other writers
+  // of the server, so a write that fails leaves the box untaken (the guard
+  // in memory forgets it too) and nothing is marked as seen and then lost.
   private async onDeliver(from: string, to: string, id: string, box: string): Promise<void> {
     if (to !== BROADCAST && to !== this.identity.id) return;
     if (from === this.identity.id) return;
     const opened = openBox(this.sealKey, { from, to, id }, box);
-    if (!opened) return;
-    if (!(await rememberBox(this.options.db, id, this.now()))) return;
-    if (!this.replay.accept(id, opened.ts)) return;
-    await this.applyMessage(from, opened.message);
-    this.options.onMessage?.(from, opened.message);
+    if (!opened || !this.replay.accept(id, opened.ts)) return;
+    const serialize = this.options.enqueue ?? (<T>(work: () => Promise<T>) => work());
+    let taken: boolean;
+    try {
+      taken = await serialize(() => withBusTransaction(this.options.db, async () => {
+        if (!(await rememberBox(this.options.db, id, this.now()))) return false;
+        await this.applyMessage(from, opened.message);
+        return true;
+      }));
+    } catch (error) {
+      this.replay.forget(id);
+      throw error;
+    }
+    if (taken) this.options.onMessage?.(from, opened.message);
   }
 
   // What another machine said, written into the local bus: its presence
@@ -506,6 +540,7 @@ export interface StartBridgeOptions {
   presenceMs?: number;
   reconnectMaxMs?: number;
   now?: () => number;
+  enqueue?: <T>(work: () => Promise<T>) => Promise<T>;
 }
 
 export interface BridgeHandle {
@@ -555,7 +590,7 @@ export function startBridgeIfElected(options: StartBridgeOptions): BridgeHandle 
     // tick (of this server or another) stands again instead of waiting for
     // the heartbeat to go stale.
     try {
-      const started = new MeshBridge({ home, db: options.db, teamKey, central: config.central, machine: loadOrCreateMachine(home), log, now, presenceMs: options.presenceMs, reconnectMaxMs: options.reconnectMaxMs });
+      const started = new MeshBridge({ home, db: options.db, teamKey, central: config.central, machine: loadOrCreateMachine(home), log, now, presenceMs: options.presenceMs, reconnectMaxMs: options.reconnectMaxMs, enqueue: options.enqueue });
       started.start();
       lock = candidate;
       bridge = started;

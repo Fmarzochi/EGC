@@ -90,7 +90,7 @@ const PEERS_TEXT_2 =
   '\n' +
   'Active locks: 2\n' +
   '- /proj/src held by s1 (ttl 900s)\n' +
-  '- src/parser.ts held by s3 (ttl 600s) (machine: desk at home)';
+  '- src/my%20parser.ts held by s3 (ttl 600s) (machine: desk at home)';
 
 const PEERS_TEXT_EMPTY =
   'Live sessions: 0\n' +
@@ -291,7 +291,7 @@ async function main() {
     assert.equal(result.locks[0].session_id, 's1');
     assert.equal(result.locks[0].ttl_seconds, 900);
     assert.equal(result.locks[0].machine_label, null);
-    assert.equal(result.locks[1].path, 'src/parser.ts');
+    assert.equal(result.locks[1].path, 'src/my parser.ts', 'a space the server percent encoded comes back as the path that is locked');
     assert.equal(result.locks[1].session_id, 's3');
     assert.equal(result.locks[1].ttl_seconds, 600);
     assert.equal(result.locks[1].machine_label, 'desk at home');

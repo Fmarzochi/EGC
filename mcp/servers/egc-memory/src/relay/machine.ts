@@ -48,20 +48,33 @@ function readMachineFile(file: string): MachineIdentity | null {
   return { id: record.id, label, createdAt: typeof record.createdAt === 'string' ? record.createdAt : new Date(0).toISOString() };
 }
 
+// A file that exists at the name of the identity and is not one (damaged,
+// or truncated by a crash) is moved aside, under a name of its own, so the
+// name is free again; the rename is atomic, so of two servers that find the
+// damage exactly one moves it and the other finds the name free or taken.
+function setDamagedAside(file: string): void {
+  try {
+    fs.renameSync(file, `${file}.damaged.${process.pid}.${crypto.randomBytes(4).toString('hex')}`);
+  } catch {
+    // another server moved it, or it is gone already
+  }
+}
+
+const CREATE_ATTEMPTS = 3;
+
 // The identity of this machine, created on the first call and the same for
-// every server of the machine from then on: the first one is published only
-// if the name is free, so of two servers creating it at once exactly one
-// wins and the other reads the winner back. A file that exists and is not
-// an identity (damaged, or truncated by a crash) is replaced, once.
+// every server of the machine from then on: it is published only if the
+// name is free, so of two servers creating it at once exactly one wins and
+// the other reads the winner back, whatever the state the name was in.
 export function loadOrCreateMachine(home: string = resolveHome()): MachineIdentity {
   const file = machineFilePath(home);
-  const existing = readMachineFile(file);
-  if (existing) return existing;
   const fresh: MachineIdentity = { id: crypto.randomBytes(16).toString('hex'), label: defaultLabel(), createdAt: new Date().toISOString() };
-  if (publishPrivateFile(file, privateJson(fresh))) return readMachineFile(file) ?? fresh;
-  const winner = readMachineFile(file);
-  if (winner) return winner;
-  writePrivateFile(file, privateJson(fresh));
+  for (let attempt = 0; attempt < CREATE_ATTEMPTS; attempt += 1) {
+    const existing = readMachineFile(file);
+    if (existing) return existing;
+    if (fs.existsSync(file)) setDamagedAside(file);
+    if (publishPrivateFile(file, privateJson(fresh))) return readMachineFile(file) ?? fresh;
+  }
   return readMachineFile(file) ?? fresh;
 }
 
