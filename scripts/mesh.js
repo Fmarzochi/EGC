@@ -24,31 +24,7 @@ const USAGE = [
 ].join('\n');
 const { NOT_BUILT, loadRelay } = require('./lib/relay-module');
 
-function readStatusFile(file) {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-    return parsed && typeof parsed === 'object' ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-function processAlive(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return error.code === 'EPERM';
-  }
-}
-
-// The bridge refreshes its status file with every presence (30 s): a file
-// older than two minutes, or whose process is gone, belongs to a bridge that
-// is gone.
-function isLiveStatus(status) {
-  if (!status || typeof status.updatedAt !== 'string' || !Number.isInteger(status.pid)) return false;
-  return Date.now() - Date.parse(status.updatedAt) < 2 * 60 * 1000 && processAlive(status.pid);
-}
+const { readStatusFile, isLiveStatus, describeBridge, describeOnline } = require('./lib/mesh-status');
 
 function showStatus() {
   const machineModule = loadRelay('machine');
@@ -72,22 +48,6 @@ function showStatus() {
     lines.push(`Online:  ${describeOnline(status, live)}`);
   }
   process.stdout.write(`${lines.join('\n')}\n`);
-}
-
-// A live bridge still attached to a central that is no longer the configured
-// one is in transition: it steps down and the new central is joined within
-// one election period.
-function describeBridge(status, live, central) {
-  if (!live) return 'not running (starts with the next memory server)';
-  const pid = `pid ${status.pid}`;
-  if (status.central !== central) return `moving to the new central (pid ${status.pid}, still on ${status.central}; the change takes up to half a minute)`;
-  return status.connected === true ? `connected (${pid})` : `reconnecting (${pid})`;
-}
-
-function describeOnline(status, live) {
-  const online = live && Array.isArray(status.online) ? status.online : [];
-  if (online.length === 0) return 'no other machine seen';
-  return `${online.length} other machine(s)`;
 }
 
 // The centrals of this machine's team on the local network, listed; null
