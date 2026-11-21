@@ -137,7 +137,7 @@ export async function flushScheduledSync(): Promise<void> {
   // repetition one of them asked for is taken by the call that follows.
   const pending = timer !== null;
   cancelScheduledSync();
-  if (activeRun) await activeRun;
+  if (activeRun !== null) await activeRun;
   else if (pending) await runSync();
   if (timer !== null || activeRun !== null) await flushScheduledSync();
 }
@@ -148,7 +148,7 @@ function reportSync(result: unknown): void {
 }
 
 async function runSync(): Promise<void> {
-  if (activeRun) {
+  if (activeRun !== null) {
     again = true;
     return;
   }
