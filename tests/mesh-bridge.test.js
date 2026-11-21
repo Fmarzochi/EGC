@@ -80,6 +80,8 @@ async function runTests() {
   const { openCompatDatabase } = await import(pathToFileURL(path.join(BUILD, 'sqlite-compat.js')).href);
   const bus = await import(pathToFileURL(path.join(BUILD, 'session-bus.js')).href);
   const notify = await import(pathToFileURL(path.join(BUILD, 'memory-notify.js')).href);
+  const encryption = await import(pathToFileURL(path.join(BUILD, 'encryption.js')).href);
+  const branchState = await import(pathToFileURL(path.join(BUILD, 'branch-state.js')).href);
 
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-mesh-bridge-'));
   const teamKey = Buffer.alloc(32, 5);
@@ -95,7 +97,10 @@ async function runTests() {
     databases.push(db);
     await bus.createSessionBusTables(db);
     const identity = loadOrCreateMachine(home);
-    return { home, db, identity };
+    // The personal key of the machine's state on disk; no integrity key, as
+    // for any home that is not the process's own.
+    const keys = { personal: encryption.loadOrCreateEncKey(path.join(home, '.egc', 'encryption.key')), integrity: null };
+    return { home, db, identity, keys };
   }
 
   const a = await machine('home-a');
@@ -107,7 +112,7 @@ async function runTests() {
   const bridges = [];
   const handles = [];
   const bridgeFor = (m, extra = {}) => {
-    const bridge = new MeshBridge({ home: m.home, db: m.db, teamKey, central, machine: m.identity, presenceMs: 300, reconnectMaxMs: 500, ...extra });
+    const bridge = new MeshBridge({ home: m.home, db: m.db, teamKey, central, machine: m.identity, keys: m.keys, presenceMs: 300, reconnectMaxMs: 500, ...extra });
     bridges.push(bridge);
     return bridge;
   };
@@ -265,6 +270,36 @@ async function runTests() {
       await first.stop();
       await second.stop();
       assert.ok(!fs.existsSync(lockFile), 'the stopped bridge released its lock');
+    });
+
+    await test('the state a machine wrote reaches the other machine sealed and is merged into its own state, with no git between them', async () => {
+      const stateDirA = path.join(a.home, '.egc', 'state');
+      const fileA = branchState.resolveStateWrite(stateDirA, projectOnA, 'main', null);
+      fs.mkdirSync(path.dirname(fileA), { recursive: true });
+      encryption.writeStateFile(fileA, '# Project State\nproject: /work/app\nbranch: main\n\n## Context\nWritten on machine A.\n\n## Active Decisions\n- Ship the envelope through the mesh: the other machine reads it before any sync\n', a.keys.personal);
+      // The two halves on their own first: sealed on A, merged on a third home.
+      const envelopes = await import(pathToFileURL(path.join(BUILD, 'relay', 'state-envelope.js')).href);
+      const notice = { kind: 'state', projectPath: projectOnA, branch: 'main', scope: 'project', at: new Date().toISOString(), hint: '' };
+      const sealed = envelopes.sealStateDocument(a.home, a.keys, teamKey, notice);
+      assert.ok(sealed, 'the document of A is sealed');
+      assert.strictEqual(sealed.tree, 'state');
+      const third = await machine('home-third');
+      const outcome = envelopes.receiveStateEnvelope(third.home, third.keys, teamKey, sealed);
+      assert.deepStrictEqual({ merged: outcome.merged, rejected: outcome.rejected, unopened: outcome.unopened, unreadable: outcome.unreadable }, { merged: 1, rejected: [], unopened: [], unreadable: [] }, `the third home merges it: ${JSON.stringify(outcome)}`);
+      // Then over the central, to a machine that is online (B left earlier).
+      const g = await machine('home-g');
+      const bridgeG = bridgeFor(g);
+      bridgeG.start();
+      await until(() => bridgeG.connected && bridgeA.online.has(g.identity.id), 'G to connect and be seen by A');
+      const told = await bus.sendEvent(a.db, { fromSession: 'tab-on-a', projectPath: projectOnA, kind: notify.MEMORY_CHANGED_KIND, payload: JSON.stringify(notice) });
+      assert.strictEqual(told.ok, true);
+      const fileG = branchState.resolveStateWrite(path.join(g.home, '.egc', 'state'), projectOnB, 'main', null);
+      await until(() => fs.existsSync(fileG), 'the state of A to land on G');
+      const onG = encryption.readStateFile(fileG, g.keys.personal);
+      assert.ok(onG.includes('Ship the envelope through the mesh'), `G reads the decision A wrote, under its own key:\n${onG}`);
+      assert.ok(!fs.existsSync(path.join(g.home, '.egc', 'mesh', 'inbox', 'state', path.relative(stateDirA, fileA))), 'the inbox copy is gone once merged');
+      assert.ok(fs.readFileSync(fileG).subarray(0, 8).toString('utf8') !== '# Projec', 'the document on G is encrypted on disk');
+      await bridgeG.stop();
     });
 
     await test('a word that memory changed on another machine pulls the team state here, sooner than a write of our own would push', async () => {

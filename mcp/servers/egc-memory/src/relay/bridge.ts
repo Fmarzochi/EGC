@@ -4,7 +4,9 @@ import WebSocket from 'ws';
 import type { RawData } from 'ws';
 
 import { resolveHome } from '../home';
-import { MEMORY_CHANGED_KIND, scheduleMemoryPull } from '../memory-notify';
+import { MEMORY_CHANGED_KIND, parseMemoryChange, scheduleMemoryPull } from '../memory-notify';
+import { machineKeys, receiveStateEnvelope, sealStateDocument } from './state-envelope';
+import type { MachineKeys } from './state-envelope';
 import {
   forgetRemoteMachine,
   listLiveSessions,
@@ -71,6 +73,8 @@ export interface BridgeOptions {
   // The write arbiter of the server, when the bridge runs inside one: what
   // the bridge writes to the bus then takes its turn with the other writers.
   enqueue?: <T>(work: () => Promise<T>) => Promise<T>;
+  // The keys of the machine's state on disk; a test home hands its own in.
+  keys?: MachineKeys;
 }
 
 export interface BridgeStatus {
@@ -192,6 +196,7 @@ export class MeshBridge {
   private lastLocksSent = '';
   private forwardRun: Promise<void> | null = null;
   private inboundChain: Promise<void> | null = null;
+  private machineKeysCache: MachineKeys | null = null;
   private readonly replay: ReplayGuard;
   private readonly authKey: Buffer;
   private readonly sealKey: Buffer;
@@ -326,10 +331,36 @@ export class MeshBridge {
   // True when the event is behind us: handed to the central, or addressed to
   // a session no machine online holds, which nobody could deliver.
   private forwardEvent(event: SharedEvent, remote: Record<string, unknown>[]): boolean {
-    if (event.to_session === null) return this.send(BROADCAST, { type: 'event', body: event });
+    if (event.to_session === null) {
+      if (!this.forwardStateDocument(event, BROADCAST)) return false;
+      return this.send(BROADCAST, { type: 'event', body: event });
+    }
     const target = remote.find(row => row.id === event.to_session);
     if (!target || typeof target.machine_id !== 'string') return true;
     return this.send(target.machine_id, { type: 'event', body: event });
+  }
+
+  // A notice that the state changed carries the document itself ahead of
+  // it, sealed as the git sync would seal it, so the other machines have the
+  // state before their sessions read the notice; a document that cannot be
+  // sealed (gone, or too large for a box) travels by the git sync alone.
+  private forwardStateDocument(event: SharedEvent, to: string): boolean {
+    if (event.kind !== MEMORY_CHANGED_KIND) return true;
+    const notice = parseMemoryChange(event.payload);
+    if (!notice || notice.kind !== 'state') return true;
+    let envelope;
+    try {
+      envelope = sealStateDocument(this.options.home, this.keys, this.options.teamKey, notice);
+    } catch (error) {
+      this.log(`mesh: the state document was not sealed: ${error instanceof Error ? error.message : String(error)}`);
+      return true;
+    }
+    return envelope === null || this.send(to, { type: 'state-envelope', body: envelope });
+  }
+
+  private get keys(): MachineKeys {
+    this.machineKeysCache ??= this.options.keys ?? machineKeys(this.options.home);
+    return this.machineKeysCache;
   }
 
   // Seals a message for one machine or for all of them and hands it to the
@@ -467,10 +498,19 @@ export class MeshBridge {
       await recordRemoteLocks(this.options.db, from, Array.isArray(locks) ? locks : []);
       return;
     }
-    if (type !== 'event') return;
+    if (type === 'state-envelope') {
+      const outcome = receiveStateEnvelope(this.options.home, this.keys, this.options.teamKey, body);
+      if (outcome && outcome.merged > 0) this.log(`mesh: state from ${from.slice(0, 8)} merged into this machine`);
+      return;
+    }
+    if (type === 'event') await this.applyEvent(body);
+  }
+
+  // An event for a session here, filed on the bus. Memory changed on another
+  // machine: the sessions here will read the notice from the bus, and the
+  // state it speaks of is pulled first.
+  private async applyEvent(body: unknown): Promise<void> {
     const filed = await recordInboundEvent(this.options.db, body, this.now());
-    // Memory changed on another machine: the sessions here will read the
-    // notice from the bus, and the state it speaks of is pulled first.
     if (filed && (body as Partial<SharedEvent> | undefined)?.kind === MEMORY_CHANGED_KIND) scheduleMemoryPull();
   }
 
