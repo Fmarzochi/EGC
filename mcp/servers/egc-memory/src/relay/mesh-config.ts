@@ -55,9 +55,21 @@ export function writeMeshConfig(central: string, home: string = resolveHome()): 
   const config: MeshConfig = { central: normalized, connectedAt: new Date().toISOString() };
   const file = meshConfigPath(home);
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  // The temporary file is created exclusively, so a link planted at its name
+  // is refused, never followed.
   const temporary = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-  fs.writeFileSync(temporary, `${JSON.stringify(config, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
-  fs.renameSync(temporary, file);
+  const descriptor = fs.openSync(temporary, 'wx', 0o600);
+  try {
+    fs.writeFileSync(descriptor, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+  } finally {
+    fs.closeSync(descriptor);
+  }
+  try {
+    fs.renameSync(temporary, file);
+  } catch (error) {
+    fs.rmSync(temporary, { force: true });
+    throw error;
+  }
   return config;
 }
 

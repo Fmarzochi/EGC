@@ -134,7 +134,9 @@ async function run() {
   // that cannot start is a log line, never a server that does not answer.
   try {
     const { startBridgeIfElected } = await import('./relay/bridge.js');
-    bridgeHandle = startBridgeIfElected({ db, log: line => log('INFO', line) });
+    // A shutdown that began while the module loaded has closed the database
+    // already: no bridge starts over it.
+    if (!shuttingDown) bridgeHandle = startBridgeIfElected({ db, log: line => log('INFO', line) });
   } catch (error) {
     log('WARN', 'The mesh bridge did not start', { error: String(error) });
   }

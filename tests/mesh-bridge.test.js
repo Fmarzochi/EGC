@@ -86,10 +86,12 @@ async function runTests() {
   let hub = await startHub({ authKey, port: 0, host: '127.0.0.1', heartbeatMs: 60_000 });
   const central = `ws://127.0.0.1:${hub.port}`;
 
+  const databases = [];
   async function machine(name) {
     const home = path.join(root, name);
     fs.mkdirSync(path.join(home, '.egc', 'memory'), { recursive: true });
     const db = await openCompatDatabase(path.join(home, '.egc', 'memory', 'state.db'), `mesh-bridge-${name}`);
+    databases.push(db);
     await bus.createSessionBusTables(db);
     const identity = loadOrCreateMachine(home);
     return { home, db, identity };
@@ -203,7 +205,7 @@ async function runTests() {
       await until(() => holders().length === 1, 'the next server to take the stale lock and connect');
       meshConfig.clearMeshConfig(e.home);
       await until(() => first.bridge === null && second.bridge === null, 'the bridge to step down once the central is forgotten');
-      assert.strictEqual(readStatus(e.home).connected, false);
+      await until(() => readStatus(e.home).connected === false, 'the status file to say the bridge is down');
       meshConfig.writeMeshConfig(central, e.home);
       await until(() => holders().length === 1, 'a central configured later to be joined');
       await first.stop();
@@ -244,8 +246,7 @@ async function runTests() {
     for (const handle of handles) await handle.stop();
     for (const bridge of bridges) await bridge.stop();
     await hub.close();
-    await a.db.close?.();
-    await b.db.close?.();
+    for (const db of databases) await db.close?.();
     fs.rmSync(root, { recursive: true, force: true });
   }
 

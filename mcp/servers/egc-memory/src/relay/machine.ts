@@ -47,13 +47,31 @@ function readMachineFile(file: string): MachineIdentity | null {
   return { id: record.id, label, createdAt: typeof record.createdAt === 'string' ? record.createdAt : new Date(0).toISOString() };
 }
 
-// Written private, through a temporary file renamed over the target, so a
-// second server starting at the same moment never reads half a file.
-function writeMachineFile(file: string, identity: MachineIdentity): void {
+// The finished identity in a private temporary file beside the target,
+// created exclusively so a link planted at that name is refused, never
+// followed.
+function writeTemporary(file: string, identity: MachineIdentity): string {
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   const temporary = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-  fs.writeFileSync(temporary, `${JSON.stringify(identity, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
-  fs.renameSync(temporary, file);
+  const descriptor = fs.openSync(temporary, 'wx', 0o600);
+  try {
+    fs.writeFileSync(descriptor, `${JSON.stringify(identity, null, 2)}\n`, 'utf8');
+  } finally {
+    fs.closeSync(descriptor);
+  }
+  return temporary;
+}
+
+// Written private, through the temporary file renamed over the target, so a
+// second server starting at the same moment never reads half a file.
+function writeMachineFile(file: string, identity: MachineIdentity): void {
+  const temporary = writeTemporary(file, identity);
+  try {
+    fs.renameSync(temporary, file);
+  } catch (error) {
+    fs.rmSync(temporary, { force: true });
+    throw error;
+  }
 }
 
 // The first identity is published by linking the finished temporary file to
@@ -61,9 +79,7 @@ function writeMachineFile(file: string, identity: MachineIdentity): void {
 // once, exactly one wins and the other reads the winner back. A file system
 // without hard links falls back to the rename.
 function publishMachineFile(file: string, identity: MachineIdentity): boolean {
-  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-  const temporary = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-  fs.writeFileSync(temporary, `${JSON.stringify(identity, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+  const temporary = writeTemporary(file, identity);
   try {
     fs.linkSync(temporary, file);
     fs.rmSync(temporary, { force: true });
@@ -84,13 +100,17 @@ function publishMachineFile(file: string, identity: MachineIdentity): boolean {
 }
 
 // The identity of this machine, created on the first call and the same for
-// every server of the machine from then on.
+// every server of the machine from then on. A file that exists and is not an
+// identity (damaged, or truncated by a crash) is replaced, once.
 export function loadOrCreateMachine(home: string = resolveHome()): MachineIdentity {
   const file = machineFilePath(home);
   const existing = readMachineFile(file);
   if (existing) return existing;
   const fresh: MachineIdentity = { id: crypto.randomBytes(16).toString('hex'), label: defaultLabel(), createdAt: new Date().toISOString() };
-  if (!publishMachineFile(file, fresh)) return readMachineFile(file) ?? loadOrCreateMachine(home);
+  if (publishMachineFile(file, fresh)) return readMachineFile(file) ?? fresh;
+  const winner = readMachineFile(file);
+  if (winner) return winner;
+  writeMachineFile(file, fresh);
   return readMachineFile(file) ?? fresh;
 }
 

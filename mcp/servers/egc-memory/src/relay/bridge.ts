@@ -77,11 +77,23 @@ export function bridgeStatusPath(home: string = resolveHome()): string {
   return path.join(meshDir(home), 'bridge.json');
 }
 
+// Private, and through a temporary file created exclusively (a link planted
+// at its name is refused) and renamed over the target.
 function writePrivateJson(file: string, value: unknown): void {
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   const temporary = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-  fs.writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
-  fs.renameSync(temporary, file);
+  const descriptor = fs.openSync(temporary, 'wx', 0o600);
+  try {
+    fs.writeFileSync(descriptor, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+  } finally {
+    fs.closeSync(descriptor);
+  }
+  try {
+    fs.renameSync(temporary, file);
+  } catch (error) {
+    fs.rmSync(temporary, { force: true });
+    throw error;
+  }
 }
 
 function processAlive(pid: number): boolean {
@@ -200,11 +212,15 @@ export class MeshBridge {
     this.connect();
   }
 
+  // The status file says "not connected" from the first moment of the stop,
+  // before the socket is closed, which can take up to a second.
   async stop(): Promise<void> {
     this.stopped = true;
     this.clearTimers();
     const socket = this.socket;
     this.socket = null;
+    this.connected = false;
+    this.writeStatus();
     if (socket && socket.readyState === WebSocket.OPEN) {
       await new Promise<void>(resolve => {
         socket.once('close', () => resolve());
@@ -313,15 +329,18 @@ export class MeshBridge {
     }
   }
 
-  // A box is taken once: the guard in memory refuses the repeats this process
-  // saw, and the bus remembers the id for a day, so a bridge that restarts or
-  // replaces this one refuses them too.
+  // A box is taken once: the bus remembers the id for a day, so a bridge that
+  // restarts or replaces this one refuses it too, and the guard in memory
+  // keeps the window of the timestamps. The durable record comes first: a
+  // box the database could not record is not marked as seen, so nothing is
+  // lost to a write that failed.
   private async onDeliver(from: string, to: string, id: string, box: string): Promise<void> {
     if (to !== BROADCAST && to !== this.identity.id) return;
     if (from === this.identity.id) return;
     const opened = openBox(this.sealKey, { from, to, id }, box);
-    if (!opened || !this.replay.accept(id, opened.ts)) return;
+    if (!opened) return;
     if (!(await rememberBox(this.options.db, id, this.now()))) return;
+    if (!this.replay.accept(id, opened.ts)) return;
     if (opened.message.type === 'presence') {
       const body = opened.message.body as Partial<PresenceBody> | undefined;
       const label = typeof body?.label === 'string' ? body.label : from.slice(0, 8);
@@ -440,9 +459,18 @@ export function startBridgeIfElected(options: StartBridgeOptions): BridgeHandle 
     }
     const candidate = new BridgeLock(home, now);
     if (!candidate.claim()) return;
-    lock = candidate;
-    bridge = new MeshBridge({ home, db: options.db, teamKey, central: config.central, machine: loadOrCreateMachine(home), log, now, presenceMs: options.presenceMs, reconnectMaxMs: options.reconnectMaxMs });
-    bridge.start();
+    // A bridge that fails to start gives the lock back at once, so the next
+    // tick (of this server or another) stands again instead of waiting for
+    // the heartbeat to go stale.
+    try {
+      const started = new MeshBridge({ home, db: options.db, teamKey, central: config.central, machine: loadOrCreateMachine(home), log, now, presenceMs: options.presenceMs, reconnectMaxMs: options.reconnectMaxMs });
+      started.start();
+      lock = candidate;
+      bridge = started;
+    } catch (error) {
+      candidate.release();
+      throw error;
+    }
   };
 
   const tick = (): void => {
