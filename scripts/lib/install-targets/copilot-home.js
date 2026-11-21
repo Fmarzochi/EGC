@@ -21,10 +21,39 @@ const {
   createBashGuardianScriptCopyOperations,
 } = require('../claude-settings-hooks');
 const {
+  SESSION_HOOK_MODULE_ID,
+  SESSION_START_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+  STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   createPreToolUseGateGuardHookMergeOperation,
   createPreToolUseCrusherHookMergeOperation,
   createPreToolUseBashGuardianHookMergeOperation,
+  createSessionStartHookMergeOperation,
+  createStopHookMergeOperation,
 } = require('../copilot-settings-hooks');
+
+// What the session hooks load, copied with their paths kept so the requires
+// resolve from ~/.github/scripts/hooks: the shared session adapter and what
+// restores, decrypts and propagates the state (the list claude-home.js
+// flattens into egc/lib), and the Team Brain sync around the session.
+const SESSION_HOOK_LIB_SOURCES = [
+  'scripts/lib/session-start-adapter.js',
+  'scripts/lib/dashboard-token.js',
+  'scripts/lib/crusher/session-marker.js',
+  'scripts/lib/session-context-loader.js',
+  'scripts/lib/branch-state.js',
+  'scripts/lib/global-state.js',
+  'scripts/lib/project-detect.js',
+  'scripts/lib/propagate-state.js',
+  'scripts/lib/state-crypto.js',
+  'scripts/lib/learning-store.js',
+  'scripts/lib/team-config.js',
+  'scripts/lib/team-autosync.js',
+  'scripts/lib/team-mcp-client.js',
+  'scripts/lib/resolve-egc-root.js',
+  // propagate-state.js's commit-privacy guard shells out to this script; with
+  // the scripts/ prefix kept it lands where the runtime looks for it.
+  'scripts/check-state-leak.js',
+];
 
 const UTILS_SOURCE_RELATIVE_PATH = 'scripts/lib/utils.js';
 // utils.js is a thin re-export over these four sibling modules (#1712);
@@ -158,6 +187,25 @@ function createGateGuardOperations(adapter, targetRoot, homeDir) {
   ];
 }
 
+// The session hooks and what they load; a file the gate operations already
+// plan (utils.js and its siblings, hook-stdin.js) is not planned twice.
+function createSessionHookOperations(adapter, targetRoot, homeDir, plannedDestinations) {
+  const copies = [SESSION_START_HOOK_SCRIPT_SOURCE_RELATIVE_PATH, STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH, ...SESSION_HOOK_LIB_SOURCES]
+    .map(sourceRelativePath => createRemappedOperation(
+      adapter,
+      SESSION_HOOK_MODULE_ID,
+      sourceRelativePath,
+      path.join(targetRoot, ...sourceRelativePath.split('/')),
+      { strategy: 'preserve-relative-path' }
+    ))
+    .filter(operation => !plannedDestinations.has(operation.destinationPath));
+  return [
+    ...copies,
+    createSessionStartHookMergeOperation(targetRoot, homeDir),
+    createStopHookMergeOperation(targetRoot, homeDir),
+  ];
+}
+
 module.exports = createInstallTargetAdapter({
   id: 'copilot-home',
   target: 'copilot',
@@ -198,11 +246,14 @@ module.exports = createInstallTargetAdapter({
     const homeDir = input.homeDir || os.homedir();
 
     // Deterministic: every Copilot install registers the GateGuard
-    // fact-forcing gate, even when no content modules are selected, mirroring
-    // Claude Code's always-on hook registration.
+    // fact-forcing gate and the session hooks, even when no content modules
+    // are selected, mirroring Claude Code's always-on hook registration.
+    const gateOperations = createGateGuardOperations(adapter, targetRoot, homeDir);
+    const plannedDestinations = new Set([...moduleOperations, ...gateOperations].map(operation => operation.destinationPath));
     return [
       ...moduleOperations,
-      ...createGateGuardOperations(adapter, targetRoot, homeDir),
+      ...gateOperations,
+      ...createSessionHookOperations(adapter, targetRoot, homeDir, plannedDestinations),
     ];
   },
 });

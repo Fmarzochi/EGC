@@ -4,6 +4,8 @@ All notable changes to EGC are documented here.
 
 ## [Unreleased]
 
+- **GitHub Copilot restores the project memory and syncs the Team Brain**: `egc install --target copilot` registers two more entries in `~/.copilot/hooks/hooks.json`, which the Copilot CLI and the VS Code agent read in the Claude Code format when the event is named in PascalCase: `SessionStart` runs `scripts/hooks/copilot-session-start.js`, which maps Copilot's payload (`sessionId`, `cwd`) to the shared session adapter, pulls the Team Brain when the team asks for it and answers the project memory as `additionalContext`; `Stop` runs `scripts/hooks/team-sync-stop.js`, which pushes when a state document changed since the last run. The scripts and what they load are copied under `~/.github/scripts` with their paths kept. The shared adapter takes a payload a host wrapper already read, for the hosts that name their fields another way.
+
 ### Changed
 
 - **The OpenCode agent registry is generated from `agents/` too** (follow-up of #2141): `node scripts/opencode-agent-prompts.js` now also rewrites the `agent` block of `.opencode/opencode.json`, one subagent per definition with its description, its model tier (`flash` for a flash model, `pro` for the rest) and its tool toggles read from the frontmatter (an MCP tool the definition names stays enabled under its own key), while keeping the primary agents the file already has in their place, so the 37 agents the hand-written block never listed are available to OpenCode by intent and no subagent entry is kept by hand; `--check` and `tests/ci/opencode-agent-prompts.test.js` report a missing, drifted or orphan entry the way they do for the prompts.

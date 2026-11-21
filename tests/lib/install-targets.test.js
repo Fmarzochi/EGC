@@ -2885,6 +2885,35 @@ function runTests() {
     );
   }));
 
+  tally(test('copilot adapter registers SessionStart and Stop at ~/.copilot/hooks/hooks.json and scaffolds the session runtime', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({ target: 'copilot', repoRoot, homeDir, modules: [] });
+    const hooksFilePath = path.join(homeDir, '.copilot', 'hooks', 'hooks.json');
+    const sessionStartScript = path.join(homeDir, '.github', 'scripts', 'hooks', 'copilot-session-start.js');
+    const stopScript = path.join(homeDir, '.github', 'scripts', 'hooks', 'team-sync-stop.js');
+
+    const sessionOperations = plan.operations.filter(operation => (
+      operation.kind === 'merge-claude-settings-hooks' && operation.destinationPath === hooksFilePath
+      && (operation.hookEvent === 'SessionStart' || operation.hookEvent === 'Stop')
+    ));
+    assert.deepStrictEqual(
+      sessionOperations.map(operation => [operation.hookEvent, operation.hookScriptPath]).sort(),
+      [['SessionStart', sessionStartScript], ['Stop', stopScript]],
+      'SessionStart runs the Copilot session start script and Stop the shared push script'
+    );
+    for (const source of ['scripts/hooks/copilot-session-start.js', 'scripts/hooks/team-sync-stop.js', 'scripts/lib/session-start-adapter.js', 'scripts/lib/session-context-loader.js', 'scripts/lib/crusher/session-marker.js', 'scripts/lib/team-autosync.js', 'scripts/check-state-leak.js']) {
+      assert.ok(
+        plan.operations.some(operation => normalizedRelativePath(operation.sourceRelativePath) === source
+          && operation.destinationPath === path.join(homeDir, '.github', ...source.split('/'))),
+        `${source} is copied with its path kept, so the requires resolve`
+      );
+    }
+    const destinations = plan.operations.map(operation => operation.destinationPath).filter(destination => destination !== hooksFilePath);
+    assert.strictEqual(new Set(destinations).size, destinations.length, 'no file is planned twice');
+  }));
+
   // Antigravity has no Token Crusher hook: its hooks answer a decision, never
   // a rewritten command (tests/lib/antigravity-mesh-hooks.test.js).
   tally(test('crusher hook is registered on Bash and scaffolded for Copilot', () => {

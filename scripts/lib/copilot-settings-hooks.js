@@ -26,9 +26,49 @@ const {
   createBashGuardianHookMergeOperationForDestination,
   resolveBashGuardianHookScriptDestination,
 } = require('./claude-settings-hooks');
+const { HOOK_OPERATION_KIND, SESSION_START_EVENT, STOP_EVENT } = require('./claude-settings-hook-core');
+
+// The session hooks: Copilot (the CLI and the VS Code agent) reads the
+// Claude Code format when the event is named in PascalCase, so SessionStart
+// and Stop go into the same hooks.json as the gates above. SessionStart
+// restores the project memory as additionalContext and pulls the Team Brain
+// when the team asks for it; Stop pushes what changed.
+const SESSION_HOOK_MODULE_ID = 'egc-copilot-session-hook';
+const SESSION_START_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/copilot-session-start.js';
+const STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/team-sync-stop.js';
 
 function resolveCopilotHooksFilePath(homeDir) {
   return path.join(homeDir, '.copilot', 'hooks', 'hooks.json');
+}
+
+function resolveSessionStartHookScriptDestination(targetRoot) {
+  return path.join(targetRoot, ...SESSION_START_HOOK_SCRIPT_SOURCE_RELATIVE_PATH.split('/'));
+}
+
+function resolveStopHookScriptDestination(targetRoot) {
+  return path.join(targetRoot, ...STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH.split('/'));
+}
+
+function createSessionHookMergeOperation(homeDir, hookEvent, sourceRelativePath, hookScriptPath) {
+  return {
+    kind: HOOK_OPERATION_KIND,
+    moduleId: SESSION_HOOK_MODULE_ID,
+    sourceRelativePath,
+    destinationPath: resolveCopilotHooksFilePath(homeDir),
+    strategy: HOOK_OPERATION_KIND,
+    ownership: 'managed',
+    scaffoldOnly: false,
+    hookEvent,
+    hookScriptPath,
+  };
+}
+
+function createSessionStartHookMergeOperation(targetRoot, homeDir) {
+  return createSessionHookMergeOperation(homeDir, SESSION_START_EVENT, SESSION_START_HOOK_SCRIPT_SOURCE_RELATIVE_PATH, resolveSessionStartHookScriptDestination(targetRoot));
+}
+
+function createStopHookMergeOperation(targetRoot, homeDir) {
+  return createSessionHookMergeOperation(homeDir, STOP_EVENT, STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH, resolveStopHookScriptDestination(targetRoot));
 }
 
 function createPreToolUseGateGuardHookMergeOperation(targetRoot, homeDir, matcher) {
@@ -64,8 +104,15 @@ function createPreToolUseBashGuardianHookMergeOperation(targetRoot, homeDir, mat
 }
 
 module.exports = {
+  SESSION_HOOK_MODULE_ID,
+  SESSION_START_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+  STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   createPreToolUseGateGuardHookMergeOperation,
   createPreToolUseCrusherHookMergeOperation,
   createPreToolUseBashGuardianHookMergeOperation,
+  createSessionStartHookMergeOperation,
+  createStopHookMergeOperation,
   resolveCopilotHooksFilePath,
+  resolveSessionStartHookScriptDestination,
+  resolveStopHookScriptDestination,
 };
