@@ -125,12 +125,25 @@ let transport: StdioServerTransport | null = null;
 async function run() {
   // Pre-warm: open DB and run migrations before accepting MCP requests.
   // Eliminates first-call latency that caused first-run failures in AGY.
-  await getDb();
+  const db = await getDb();
   transport = new StdioServerTransport();
   await server.connect(transport);
   log('INFO', 'egc-memory-orchestrator initialized with Write Arbitration');
+  // The bridge to the mesh central, when this machine has one configured
+  // and this process won the election among the machine's servers; a bridge
+  // that cannot start is a log line, never a server that does not answer.
+  try {
+    const { startBridgeIfElected } = await import('./relay/bridge.js');
+    // A shutdown that began while the module loaded has closed the database
+    // already: no bridge starts over it.
+    if (!shuttingDown) bridgeHandle = startBridgeIfElected({ db, log: line => log('INFO', line) });
+  } catch (error) {
+    log('WARN', 'The mesh bridge did not start', { error: String(error) });
+  }
 }
 
+// The bridge to the mesh, stopped before the database closes under it.
+let bridgeHandle: { stop(): Promise<void> } | null = null;
 let shuttingDown = false;
 
 async function shutdown() {
@@ -145,6 +158,10 @@ async function shutdown() {
     await new Promise<void>(resolve => idleWaiters.push(resolve));
   }
   closeMeshTransport();
+  if (bridgeHandle) {
+    await bridgeHandle.stop().catch(() => undefined);
+    bridgeHandle = null;
+  }
   await closeDb();
   if (transport) {
     await server.close();

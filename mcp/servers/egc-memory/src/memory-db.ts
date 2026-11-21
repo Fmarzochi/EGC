@@ -245,6 +245,15 @@ async function runMigrations(db: Database, dbDir: string) {
       await db.run('INSERT INTO schema_migrations (version) VALUES (12)');
     }
 
+    // Migration 13: the mesh tables of the session bus (mesh_machines, the
+    // presence of the other machines; mesh_boxes, the boxes already taken).
+    // A database migrated before they existed gets them here.
+    const hasV13 = await db.get('SELECT version FROM schema_migrations WHERE version = 13');
+    if (!hasV13) {
+      await createSessionBusTables(db);
+      await db.run('INSERT INTO schema_migrations (version) VALUES (13)');
+    }
+
     const bootRow = await db.get<{value: string}>('SELECT value FROM operational_state WHERE id = ?', ['server_boot_count']);
     const bootCount = bootRow ? Number.parseInt(bootRow.value, 10) + 1 : 1;
     await db.run('INSERT OR REPLACE INTO operational_state (id, value) VALUES (?, ?)', ['server_boot_count', String(bootCount)]);

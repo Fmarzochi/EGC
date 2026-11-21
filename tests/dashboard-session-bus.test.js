@@ -83,9 +83,10 @@ function clearBusStub() {
 
 // Real MCP text responses (matching handleSessionPeers/Send/Events in index.ts)
 const PEERS_TEXT_2 =
-  'Live sessions: 2\n' +
+  'Live sessions: 3\n' +
   '- s1 [/proj] (territory: src/) since 2026-08-13T10:00:00.000Z\n' +
   '- s2 [/proj] since 2026-08-13T10:01:00.000Z\n' +
+  '- s3 (machine: desk at home) [/proj] (territory: docs/) since 2026-08-13T10:02:00.000Z\n' +
   '\n' +
   'Active locks: 1\n' +
   '- /proj/src held by s1 (ttl 900s)';
@@ -265,19 +266,25 @@ async function main() {
   // -- Text parser unit tests -----------------------------------------------
   console.log('');
 
-  await test('_parsePeersText: 2 peers, 1 lock', async () => {
+  await test('_parsePeersText: 2 local peers, 1 peer of another machine, 1 lock', async () => {
     stubBusText(PEERS_TEXT_2);
     let result;
     try {
       result = await operations.sessionPeers({});
     } finally { clearBusStub(); }
-    assert.equal(result.peers.length, 2);
+    assert.equal(result.peers.length, 3);
     assert.equal(result.peers[0].id, 's1');
+    assert.equal(result.peers[0].machine_label, null);
     assert.equal(result.peers[0].project_path, '/proj');
     assert.equal(result.peers[0].territory, 'src/');
     assert.ok(result.peers[0].started_at);
     assert.equal(result.peers[1].id, 's2');
     assert.equal(result.peers[1].territory, null);
+    assert.equal(result.peers[2].id, 's3');
+    assert.equal(result.peers[2].machine_label, 'desk at home');
+    assert.equal(result.peers[2].project_path, '/proj');
+    assert.equal(result.peers[2].territory, 'docs/');
+    assert.equal(result.peers[2].started_at, '2026-08-13T10:02:00.000Z');
     assert.equal(result.locks.length, 1);
     assert.equal(result.locks[0].path, '/proj/src');
     assert.equal(result.locks[0].session_id, 's1');
@@ -481,7 +488,7 @@ async function main() {
   // -- Happy-path HTTP round-trips ------------------------------------------
   console.log('');
 
-  await test('POST /ops/sessionPeers: 2 peers parsed from MCP text', async () => {
+  await test('POST /ops/sessionPeers: 3 peers parsed from MCP text, one of another machine', async () => {
     stubBusText(PEERS_TEXT_2);
     const token = 'e'.repeat(64);
     const server = await startOpsServer({ token });
@@ -489,8 +496,9 @@ async function main() {
       const { status, payload } = await postOps(server, 'sessionPeers', { token, body: {} });
       assert.equal(status, 200, 'got ' + status + ': ' + (payload && payload.error));
       assert.equal(payload.ok, true);
-      assert.equal(payload.result.peers.length, 2);
+      assert.equal(payload.result.peers.length, 3);
       assert.equal(payload.result.peers[0].id, 's1');
+      assert.equal(payload.result.peers[2].machine_label, 'desk at home');
       assert.equal(payload.result.locks.length, 1);
     } finally { clearBusStub(); await server.close(); }
   });
