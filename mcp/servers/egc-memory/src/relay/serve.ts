@@ -47,6 +47,29 @@ export function parseServeArgs(argv: readonly string[]): ServeArgs | string {
   return args;
 }
 
+// On the home network the central says where it is, so a machine of the
+// team runs `egc mesh connect` with no address; a central behind a VPN or
+// on a server, where multicast does not travel, is reached by its address.
+// An announcement names every address of the machine, so a central bound
+// to one address alone is not announced: it is reached by that address.
+function announceIfWanted(args: ServeArgs, port: number, teamKey: Buffer): Announcement | null {
+  if (!args.announce) return null;
+  if (!WILDCARD_HOSTS.has(args.host)) {
+    // An IPv6 address goes in brackets before the port, as connect reads it.
+    const shown = args.host.includes(':') ? `[${args.host}]` : args.host;
+    process.stdout.write(`Bound to ${args.host} alone, the central is not announced on the local network: from a machine of the team, egc mesh connect ${shown}:${port}.\n`);
+    return null;
+  }
+  try {
+    const announcement = announceCentral({ port, teamKey, onError: error => process.stderr.write(`The announcement on the local network failed, and the central keeps serving: ${error.message}\n`) });
+    process.stdout.write(`Announced on the local network as ${announcement.name} (_egc-mesh._tcp); egc mesh connect with no address finds it from a machine of the team.\n`);
+    return announcement;
+  } catch (error) {
+    process.stderr.write(`The central is not announced on the local network: ${error instanceof Error ? error.message : String(error)}\n`);
+    return null;
+  }
+}
+
 export async function main(argv: readonly string[]): Promise<void> {
   const args = parseServeArgs(argv);
   if (typeof args === 'string') {
@@ -74,22 +97,7 @@ export async function main(argv: readonly string[]): Promise<void> {
     return;
   }
   process.stdout.write(`EGC mesh central listening on ${hub.host}:${hub.port}\n`);
-  // On the home network the central says where it is, so a machine of the
-  // team runs `egc mesh connect` with no address; a central behind a VPN or
-  // on a server, where multicast does not travel, is reached by its address.
-  // An announcement names every address of the machine, so a central bound
-  // to one address alone is not announced: it is reached by that address.
-  let announcement: Announcement | null = null;
-  if (args.announce && !WILDCARD_HOSTS.has(args.host)) {
-    process.stdout.write(`Bound to ${args.host} alone, the central is not announced on the local network: from a machine of the team, egc mesh connect ${args.host}:${hub.port}.\n`);
-  } else if (args.announce) {
-    try {
-      announcement = announceCentral({ port: hub.port, teamKey, onError: error => process.stderr.write(`The announcement on the local network failed, and the central keeps serving: ${error.message}\n`) });
-      process.stdout.write(`Announced on the local network as ${announcement.name} (_egc-mesh._tcp); egc mesh connect with no address finds it from a machine of the team.\n`);
-    } catch (error) {
-      process.stderr.write(`The central is not announced on the local network: ${error instanceof Error ? error.message : String(error)}\n`);
-    }
-  }
+  const announcement = announceIfWanted(args, hub.port, teamKey);
   const stop = (): void => {
     const quiet = announcement ? announcement.stop() : Promise.resolve();
     quiet.catch(() => undefined).then(() => hub.close()).then(() => process.exit(0), () => process.exit(1));
