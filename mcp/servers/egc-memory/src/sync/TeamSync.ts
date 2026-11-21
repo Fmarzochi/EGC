@@ -11,6 +11,8 @@ import { loadOrCreateKey as loadOrCreateIntegrityKey, writeHmac } from '../integ
 import { branchStateKey, projectIdentity, projectSlug } from '../branch-state';
 import { TEAM_MARKER_FILE, generateTeamKey, markerMatches, openEnvelope, parseTeamKey, sealEnvelope, teamKeyMarker } from './envelope';
 import { canonicalForm, mergeStateDocuments } from './merge-sections';
+import { globalStateFilePath } from '../global-state';
+import { resolveHome } from '../home';
 
 // The integrity sidecar next to a state document is a per-machine value,
 // made with ~/.egc/integrity.key: it never travels, and a merged document
@@ -20,7 +22,10 @@ function isSidecar(filePath: string): boolean {
   return filePath.endsWith(SIDECAR_SUFFIX);
 }
 
-const TEAM_CONFIG_PATH = path.join(os.homedir(), '.egc', 'team.json');
+// Every path of this machine comes from the home the rest of the server
+// resolves (HOME, then USERPROFILE, then the OS): the state the sync reads
+// is the state update_state writes, on Windows too.
+const TEAM_CONFIG_PATH = path.join(resolveHome(), '.egc', 'team.json');
 
 // What never leaves the machine, whatever the document says: a credential
 // pasted into the state is refused on the way out, and the person is told
@@ -103,7 +108,7 @@ export function getTeamConfig(): SyncConfig | null {
 
 // The config carries the team key, so it is private to the user.
 export function writeTeamConfig(config: SyncConfig): void {
-  const egcDir = path.join(os.homedir(), '.egc');
+  const egcDir = path.join(resolveHome(), '.egc');
   fs.mkdirSync(egcDir, { recursive: true, mode: 0o700 });
   try {
     fs.chmodSync(egcDir, 0o700);
@@ -141,7 +146,7 @@ export async function teamInit(backend: string, remote: string, branch: string =
     // written, whether the key was given or made here for a new team, and a
     // repository from before the marker that already holds state asks the
     // key to open one of its files, as the sync would.
-    const judged = judgeTeamKey(SYNC_CHECKOUT_DIR, SYNC_STATE_DIR, parseTeamKey(config.teamKey) as Buffer, remote, { requireProofWithoutMarker: true });
+    const judged = judgeTeamKey(SYNC_CHECKOUT_DIR, SYNC_TREE_DIRS, parseTeamKey(config.teamKey) as Buffer, remote, { requireProofWithoutMarker: true });
     if (judged.verdict === 'wrong') throw new Error(judged.message);
     writeTeamConfig(config);
     return config;
@@ -203,7 +208,7 @@ export async function teamSync(): Promise<SyncResult> {
     // (the key opens the state files the marker disowns) is said and
     // rewritten with the push below, a repository without one keeps the rule
     // of the opened files.
-    const judged = judgeTeamKey(SYNC_CHECKOUT_DIR, SYNC_STATE_DIR, teamKey, config.remote);
+    const judged = judgeTeamKey(SYNC_CHECKOUT_DIR, SYNC_TREE_DIRS, teamKey, config.remote);
     if (judged.verdict === 'wrong') {
       result.errors.push(judged.message);
       return result;
@@ -268,18 +273,20 @@ export async function teamStatus(): Promise<SyncStatus> {
   }
 }
 
-const SYNC_CHECKOUT_DIR = path.join(os.homedir(), '.egc', 'team-sync');
+const SYNC_CHECKOUT_DIR = path.join(resolveHome(), '.egc', 'team-sync');
 const SYNC_STATE_DIR = path.join(SYNC_CHECKOUT_DIR, 'state');
-const LOCAL_STATE_DIR = path.join(os.homedir(), '.egc', 'state');
+const LOCAL_STATE_DIR = path.join(resolveHome(), '.egc', 'state');
 
 // The trees the sync carries, each sealed and merged document by document:
 // the project states, and the user-wide memory update_state writes with
-// scope "global", which one person's machines share as they share the rest.
+// scope "global" (the directory of the file global-state names), which one
+// person's machines share as they share the rest.
 interface SyncTree { label: string; sync: string; local: string }
 const SYNC_TREES: readonly SyncTree[] = [
   { label: 'state', sync: SYNC_STATE_DIR, local: LOCAL_STATE_DIR },
-  { label: 'global', sync: path.join(SYNC_CHECKOUT_DIR, 'global'), local: path.join(os.homedir(), '.egc', 'global') },
+  { label: 'global', sync: path.join(SYNC_CHECKOUT_DIR, 'global'), local: path.dirname(globalStateFilePath()) },
 ];
+const SYNC_TREE_DIRS: readonly string[] = SYNC_TREES.map(tree => tree.sync);
 type TreeMerge = { tree: SyncTree; outcome: TeamMergeOutcome };
 
 // The merges of every tree as one outcome; a path outside the project
@@ -378,21 +385,33 @@ function isRegularFile(filePath: string): boolean {
   }
 }
 
-// The state files of the sync tree a key could open: regular files that are
-// neither sidecars nor hidden, none when the tree is missing or sits behind
-// a link, the same guard the merge applies before it walks the tree.
-function stateFilesOf(syncStateDir: string): string[] {
+// One sync tree or several (the project states and the global memory): the
+// key is judged against every document the repository holds.
+type SyncTreeDirs = string | readonly string[];
+
+function treeDirsOf(dirs: SyncTreeDirs): readonly string[] {
+  return typeof dirs === 'string' ? [dirs] : dirs;
+}
+
+// The state files of a sync tree a key could open: regular documents that
+// are not hidden, none when the tree is missing or sits behind a link, the
+// same guard the merge applies before it walks the tree.
+function stateFilesOfTree(syncStateDir: string): string[] {
   if (linkedDirectoryTowards(syncStateDir) || !fs.existsSync(syncStateDir)) return [];
   return walkEntries(syncStateDir).files.filter(file => isStateDocument(file) && !isHiddenEntry(file, syncStateDir));
 }
 
-// Whether the key opens at least one envelope of the sync tree, reading
+function stateFilesOf(dirs: SyncTreeDirs): { dir: string; file: string }[] {
+  return treeDirsOf(dirs).flatMap(dir => stateFilesOfTree(dir).map(file => ({ dir, file })));
+}
+
+// Whether the key opens at least one envelope of the sync trees, reading
 // only: the proof the marker rule falls back on when the marker disagrees,
 // and the proof an init asks of a repository from before the marker.
-export function keyOpensAny(syncStateDir: string, teamKey: Buffer): boolean {
-  return stateFilesOf(syncStateDir).some(file => {
+export function keyOpensAny(dirs: SyncTreeDirs, teamKey: Buffer): boolean {
+  return stateFilesOf(dirs).some(({ dir, file }) => {
     try {
-      return openEnvelope(fs.readFileSync(file, 'utf-8'), teamKey, path.relative(syncStateDir, file)) !== null;
+      return openEnvelope(fs.readFileSync(file, 'utf-8'), teamKey, path.relative(dir, file)) !== null;
     } catch {
       return false;
     }
@@ -416,7 +435,7 @@ export interface TeamKeyJudgementOptions {
 // marker matches or is absent, damaged when it disagrees but the key opens
 // the state files (the marker was not written by this key, the files were),
 // wrong when it disagrees and the key opens none.
-export function judgeTeamKey(checkoutDir: string, syncStateDir: string, teamKey: Buffer, remote: string, options: TeamKeyJudgementOptions = {}): TeamKeyJudgement {
+export function judgeTeamKey(checkoutDir: string, syncStateDir: SyncTreeDirs, teamKey: Buffer, remote: string, options: TeamKeyJudgementOptions = {}): TeamKeyJudgement {
   const shownRemote = redactRemote(remote);
   const marker = readMarkerState(checkoutDir, teamKey);
   if (marker === 'match') return { verdict: 'ok' };
@@ -448,9 +467,11 @@ function keyNotProvenMessage(count: number): string {
 
 async function pushSealedState(instance: SyncBackend, teamKey: Buffer, personalKey: Buffer, merges: readonly TreeMerge[], result: SyncResult): Promise<void> {
   try {
+    // One push carries every tree, so the cap of a push is shared by them.
+    const ledger: StagingLedger = { stagedBytes: 0 };
     for (const { tree, outcome } of merges) {
       const refusals: StagingRefusal[] = [];
-      stageTeamState(tree.local, tree.sync, teamKey, personalKey, new Set(outcome.unopened), refusals);
+      stageTeamState(tree.local, tree.sync, teamKey, personalKey, new Set(outcome.unopened), refusals, DEFAULT_LIMITS, ledger);
       for (const refusal of refusals) {
         result.warnings.push(`Not pushed: ${tree.label}/${refusal.path} ${refusal.reason}. Rewrite that document on this machine (update_state rewrites it) and sync again; the version pushed before, if any, stays on the remote.`);
       }
@@ -519,7 +540,7 @@ function hasLinkedAncestor(filePath: string, root: string): boolean {
 // directory and the temporary directory (where tests place their trees).
 // Above them the system's own layout (a linked /tmp, say) is not ours to judge.
 function trustedRoots(): string[] {
-  return [os.homedir(), os.tmpdir()].map(root => path.resolve(root));
+  return [...new Set([resolveHome(), os.homedir(), os.tmpdir()].map(root => path.resolve(root)))];
 }
 
 // The prefix every descendant of `root` starts with; a root that is the
@@ -781,7 +802,10 @@ function indexLegacyDocuments(localStateDir: string, personalKey: Buffer): Map<s
 // `keep` holds the relative paths the merge could not open: this machine
 // never writes its own state over an envelope it cannot read, so those
 // paths are left as they are and not staged.
-type StageContext = { localStateDir: string; syncStateDir: string; teamKey: Buffer; personalKey: Buffer; keep: ReadonlySet<string>; refused: StagingRefusal[]; limits: StagingLimits };
+// The bytes a push already carries: one ledger across the trees staged for
+// the same push, so the cap of a push holds for all of them together.
+export interface StagingLedger { stagedBytes: number }
+type StageContext = { localStateDir: string; syncStateDir: string; teamKey: Buffer; personalKey: Buffer; keep: ReadonlySet<string>; refused: StagingRefusal[]; limits: StagingLimits; ledger: StagingLedger };
 
 // Why a document may not leave: a secret shape in it, a size above the cap
 // of one document, or a push already at its cap. Null when it may leave.
@@ -834,7 +858,7 @@ function alreadySealed(target: string, plaintext: string, context: StageContext,
 // tree at the path it is shared under. Returns how many documents the tree
 // holds for this machine, written now or already there as they are.
 function sealDocuments(byPath: ReadonlyMap<string, string>, context: StageContext): number {
-  let stagedBytes = 0;
+  const { ledger } = context;
   let staged = 0;
   for (const [sharedPath, plaintext] of byPath) {
     const target = path.join(context.syncStateDir, sharedPath);
@@ -844,7 +868,7 @@ function sealDocuments(byPath: ReadonlyMap<string, string>, context: StageContex
       continue;
     }
     const bytes = Buffer.byteLength(plaintext, 'utf-8');
-    const refusal = refusalFor(plaintext, bytes, stagedBytes, context.limits);
+    const refusal = refusalFor(plaintext, bytes, ledger.stagedBytes, context.limits);
     if (refusal !== null) {
       context.refused.push({ path: sharedPath, reason: refusal });
       continue;
@@ -852,20 +876,22 @@ function sealDocuments(byPath: ReadonlyMap<string, string>, context: StageContex
     if (isLink(target)) removeSyncFile(target);
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, sealEnvelope(plaintext, context.teamKey, sharedPath), 'utf-8');
-    stagedBytes += bytes;
+    ledger.stagedBytes += bytes;
     staged += 1;
   }
   return staged;
 }
 
-export function stageTeamState(localStateDir: string, syncStateDir: string, teamKey: Buffer, personalKey: Buffer, keep: ReadonlySet<string> = new Set(), refusals: StagingRefusal[] = [], limits: StagingLimits = DEFAULT_LIMITS): number {
+// `ledger` carries the bytes already staged for the same push by another
+// tree; a caller that stages one tree alone starts a ledger of its own.
+export function stageTeamState(localStateDir: string, syncStateDir: string, teamKey: Buffer, personalKey: Buffer, keep: ReadonlySet<string> = new Set(), refusals: StagingRefusal[] = [], limits: StagingLimits = DEFAULT_LIMITS, ledger: StagingLedger = { stagedBytes: 0 }): number {
   const linkedLocal = linkedDirectoryTowards(localStateDir);
   if (linkedLocal) throw new Error(`the local state tree is a link at ${linkedLocal} and is not staged`);
   const linkedSync = linkedDirectoryTowards(syncStateDir);
   if (linkedSync) throw new Error(`the sync state tree is a link at ${linkedSync} and is not written`);
   if (!fs.existsSync(localStateDir)) return 0;
 
-  const context: StageContext = { localStateDir, syncStateDir, teamKey, personalKey, keep, refused: refusals, limits };
+  const context: StageContext = { localStateDir, syncStateDir, teamKey, personalKey, keep, refused: refusals, limits, ledger };
   return sealDocuments(collectDocuments(context), context);
 }
 

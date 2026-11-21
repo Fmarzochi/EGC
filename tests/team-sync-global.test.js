@@ -124,10 +124,11 @@ try {
     assert.ok(stateOnB.includes('global preference from machine A'), `the preference of machine A is there:\n${stateOnB}`);
   });
 
-  test('the global memory travels sealed: the copy in the shared repository does not show its text', () => {
-    const sealed = path.join(homeA, '.egc', 'team-sync', 'global', 'state.md');
-    assert.ok(fs.existsSync(sealed), 'the global document is in the shared tree');
-    assert.ok(!fs.readFileSync(sealed, 'utf8').includes('global preference from machine A'), 'no plaintext on the remote');
+  test('the global memory travels sealed: the blob the remote holds does not show its text', () => {
+    const pushed = git(remote, ['show', 'main:global/state.md']);
+    assert.ok(pushed.length > 0, 'the global document is on the remote');
+    assert.ok(!pushed.includes('global preference from machine A'), 'no plaintext on the remote');
+    assert.ok(!pushed.includes('Preferences'), 'not even the section headings');
   });
 
   test('the two copies of the global memory merge section by section, so a preference written on each machine survives on both', () => {
