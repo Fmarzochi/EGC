@@ -2919,7 +2919,9 @@ function runTests() {
   tally(test('COPILOT_HOME moves the whole Copilot root: the hooks file, the skills and the managed roots', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
-    const custom = '/Volumes/work/copilot-home';
+    // Resolved the way the adapter resolves COPILOT_HOME, so the expected
+    // paths carry the drive letter on Windows too.
+    const custom = path.resolve('/Volumes/work/copilot-home');
     const previous = process.env.COPILOT_HOME;
     process.env.COPILOT_HOME = custom;
     try {
