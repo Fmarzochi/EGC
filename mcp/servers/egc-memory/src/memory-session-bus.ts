@@ -74,7 +74,7 @@ export const SessionWaitSchema = z.object({
 // project (binding there would pin the process directory). A caller cannot
 // name another session or another project: every read, send, announce and
 // release happens as this session, inside the project it joined.
-const BUS_SESSION_ID = `bus-${process.pid}`;
+export const BUS_SESSION_ID = `bus-${process.pid}`;
 let busProject: string | null = null;
 
 function foreignSessionRefusal(requested?: string): string | null {

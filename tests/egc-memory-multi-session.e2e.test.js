@@ -261,8 +261,10 @@ async function main() {
   });
   check('broadcast aceito', /broadcast/.test(broadcast), broadcast.slice(0, 80));
 
+  // The sender may still read the memory:changed notices the other sessions'
+  // writes left on the bus; its own broadcast is never among them.
   const senderRead = await sessions[0].tool('session_events', { project_path: PROJECT });
-  check('remetente nao recebe o proprio broadcast', /No new events/.test(senderRead), senderRead.slice(0, 60));
+  check('remetente nao recebe o proprio broadcast', !/heads-up/.test(senderRead), senderRead.slice(0, 60));
 
   const lastReader = sessions[sessions.length - 1];
   const firstRead = await lastReader.tool('session_events', { project_path: PROJECT });
