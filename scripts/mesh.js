@@ -10,11 +10,14 @@ const path = require('node:path');
 
 const RELAY_RELATIVE = ['mcp', 'servers', 'egc-memory', 'build', 'relay'];
 const USAGE = [
-  'Usage: egc mesh <serve [--port <n>] [--host <address>] | connect <address> | disconnect | status | label <name>>',
+  'Usage: egc mesh <serve [--port <n>] [--host <address>] [--install | --uninstall] | connect <address> | disconnect | status | label <name>>',
   '',
   '  serve             Run the central that relays between your machines (port 47470 by default;',
   '                    --port and --host change where it listens).',
   '                    It lets in the machines that hold the key of this machine\'s team (egc team init).',
+  '                    --install runs it as a service of your session instead, back at every login',
+  '                    (systemd on Linux, launchd on macOS, a scheduled task on Windows); --uninstall',
+  '                    stops that service and removes it.',
   '  connect <addr>    Point this machine at a central (host:port, a host alone for port 47470,',
   '                    or a ws:// or wss:// URL). The memory servers connect from their next start.',
   '  disconnect        Forget the central: the machine works alone again, and a running bridge',
@@ -46,6 +49,7 @@ function loadRelay(name) {
 }
 
 const { readStatusFile, isLiveStatus, describeBridge, describeOnline } = require('./lib/mesh-status');
+const { installService, uninstallService, serviceStatus, describeService } = require('./lib/mesh-service');
 
 function showStatus() {
   const machineModule = loadRelay('machine');
@@ -68,7 +72,21 @@ function showStatus() {
     lines.push(`Bridge:  ${describeBridge(status, live, config.central)}`);
     lines.push(`Online:  ${describeOnline(status, live)}`);
   }
+  lines.push(`Service: ${describeService(serviceStatus())}`);
   process.stdout.write(`${lines.join('\n')}\n`);
+}
+
+// The central as a service of this session: written and started here, or
+// stopped and removed; the flags of serve travel into the unit.
+function installCentral(args) {
+  const installed = installService({ args: args.filter(arg => arg !== '--install') });
+  const where = installed.path ? `\nUnit:    ${installed.path}` : '';
+  process.stdout.write(`Service: installed and started (${describeService(serviceStatus())})${where}\n${installed.hint}\negc mesh status shows it; egc mesh serve --uninstall removes it.\n`);
+}
+
+function uninstallCentral() {
+  const removed = uninstallService();
+  process.stdout.write(removed.removed ? 'Service: stopped and removed. The central runs again with egc mesh serve, or egc mesh serve --install.\n' : 'Service: no service to remove on this machine.\n');
 }
 
 function connectCentral(address) {
@@ -138,6 +156,8 @@ async function main(argv) {
     process.exitCode = 2;
     return;
   }
+  if (rest.includes('--uninstall')) return uninstallCentral();
+  if (rest.includes('--install')) return installCentral(rest);
   const serve = loadRelay('serve');
   if (!serve) {
     process.stderr.write(NOT_BUILT);
