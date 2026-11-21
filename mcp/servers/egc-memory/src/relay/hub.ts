@@ -21,7 +21,11 @@ import type { HubFrame } from './protocol';
 // for up to a day. It never holds the key that opens a box.
 export const HELLO_TIMEOUT_MS = 10_000;
 export const HEARTBEAT_MS = 30_000;
+// What waits for a machine that is off: at most this many boxes from one
+// sender, and at most this many in all, so a member that keeps minting
+// machine ids cannot fill the central for one target.
 export const PENDING_PER_SENDER = 200;
+export const PENDING_PER_TARGET = 1000;
 
 // Close codes a machine can tell apart.
 export const CLOSE_NO_HELLO = 4001;
@@ -151,8 +155,11 @@ class Central {
     }
     const targets = to === BROADCAST ? [...this.lastSeen.keys()].filter(machine => machine !== from && this.isKnown(machine)) : [to];
     for (const target of targets) {
+      // A socket on its way out (closing after a disconnect or a missed
+      // heartbeat, before its close event ran) delivers nothing: the box
+      // waits for the next connection of that machine instead.
       const socket = this.online.get(target);
-      if (socket) send(socket, { t: 'deliver', v: MESH_PROTOCOL_VERSION, from, to, id, box });
+      if (socket && socket.readyState === socket.OPEN) send(socket, { t: 'deliver', v: MESH_PROTOCOL_VERSION, from, to, id, box });
       else this.store(target, { from, to, id, box, storedAt: this.now() });
     }
   }
@@ -162,12 +169,14 @@ class Central {
   }
 
   // Keeps a box for a machine that is off: at most PENDING_PER_SENDER from
-  // one sender, the oldest of that sender giving way to the newest.
+  // one sender and PENDING_PER_TARGET in all, the oldest giving way to the
+  // newest in each case.
   private store(target: string, item: Pending): void {
     const kept = (this.pending.get(target) ?? []).filter(pending => this.fresh(pending));
     const fromSender = kept.filter(pending => pending.from === item.from);
-    const dropped = fromSender.length >= PENDING_PER_SENDER ? fromSender[0] : null;
-    this.pending.set(target, [...kept.filter(pending => pending !== dropped), item]);
+    const bySender = fromSender.length >= PENDING_PER_SENDER ? kept.filter(pending => pending !== fromSender[0]) : kept;
+    const byTarget = bySender.length >= PENDING_PER_TARGET ? bySender.slice(bySender.length - PENDING_PER_TARGET + 1) : bySender;
+    this.pending.set(target, [...byTarget, item]);
   }
 
   private flush(target: string, socket: WebSocket): void {

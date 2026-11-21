@@ -176,7 +176,12 @@ export function openBox(sealKey: Buffer, address: BoxAddress, box: string): { ts
 // What a machine accepts once a box opened: a message sealed within the last
 // day and not ahead of this clock by more than the tolerated skew, and each
 // message id once. Ids are forgotten when their message would be refused
-// for its age anyway, so the memory of a long session stays bounded.
+// for its age anyway, so the memory of a long session stays bounded. The
+// guard lives in the process that opens the boxes and knows nothing of an
+// earlier one: a machine that restarts within the day takes a box it had
+// already opened as new, and what that costs is one repeated notice, since
+// what the boxes carry (events, locks, records merged by id) is idempotent
+// on the receiving side.
 export class ReplayGuard {
   private readonly seen = new Map<string, number>();
 

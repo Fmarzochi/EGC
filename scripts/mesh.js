@@ -44,7 +44,7 @@ async function main(argv) {
   }
   const script = serveScript();
   if (!script) {
-    process.stderr.write('The memory server is not built, so the mesh central cannot run: run `egc repair` (or `npm run build` in mcp/servers/egc-memory of a checkout).\n');
+    process.stderr.write('The memory server is not built, so the mesh central cannot run: in a checkout of EGC run `bash scripts/install.sh`, which builds the servers, or `npm run build` in mcp/servers/egc-memory.\n');
     process.exitCode = 1;
     return;
   }

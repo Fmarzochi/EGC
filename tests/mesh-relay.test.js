@@ -15,10 +15,14 @@ const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 
+const { CLI_TIMEOUT_MS } = require('./fixtures/subprocess-timeouts');
+
 const ROOT = path.join(__dirname, '..');
 const SERVER_DIR = path.join(ROOT, 'mcp', 'servers', 'egc-memory');
 const BUILD = path.join(SERVER_DIR, 'build', 'relay');
 const MESH_CLI = path.join(ROOT, 'scripts', 'mesh.js');
+// In-process steps (a frame over the loopback) get five seconds; a CLI
+// subprocess gets the budget the suite gives every CLI child.
 const STEP_TIMEOUT_MS = 5000;
 
 if (!fs.existsSync(path.join(BUILD, 'hub.js'))) {
@@ -44,10 +48,10 @@ async function test(name, fn) {
   }
 }
 
-function within(promise, what) {
+function within(promise, what, budgetMs = STEP_TIMEOUT_MS) {
   let timer;
   const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`timed out waiting for ${what}`)), STEP_TIMEOUT_MS);
+    timer = setTimeout(() => reject(new Error(`timed out waiting for ${what}`)), budgetMs);
   });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
@@ -208,17 +212,26 @@ async function runTests() {
 
   await test('egc mesh serve runs the central with the key of the team and stops on SIGTERM; without a team it says so', async () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-mesh-serve-'));
+    // The central is tracked outside the try: an assertion that fails after
+    // the spawn must not leave a server running behind the suite.
+    let child = null;
+    let exited = null;
     try {
       const env = { ...process.env, HOME: home, USERPROFILE: home };
-      const lonely = spawnSync(process.execPath, [MESH_CLI, 'serve', '--port', '0', '--host', '127.0.0.1'], { env, encoding: 'utf8', timeout: STEP_TIMEOUT_MS });
+      const lonely = spawnSync(process.execPath, [MESH_CLI, 'serve', '--port', '0', '--host', '127.0.0.1'], { env, encoding: 'utf8', timeout: CLI_TIMEOUT_MS });
       assert.strictEqual(lonely.status, 1);
       assert.match(lonely.stderr, /No team on this machine/);
-      const badPort = spawnSync(process.execPath, [MESH_CLI, 'serve', '--port', 'many'], { env, encoding: 'utf8', timeout: STEP_TIMEOUT_MS });
+      const badPort = spawnSync(process.execPath, [MESH_CLI, 'serve', '--port', 'many'], { env, encoding: 'utf8', timeout: CLI_TIMEOUT_MS });
       assert.strictEqual(badPort.status, 2);
       fs.mkdirSync(path.join(home, '.egc'), { recursive: true });
+      fs.writeFileSync(path.join(home, '.egc', 'team.json'), '{ not json');
+      const damaged = spawnSync(process.execPath, [MESH_CLI, 'serve', '--port', '0', '--host', '127.0.0.1'], { env, encoding: 'utf8', timeout: CLI_TIMEOUT_MS });
+      assert.strictEqual(damaged.status, 1);
+      assert.match(damaged.stderr, /holds no valid team key/);
+      assert.match(damaged.stderr, /without `--key`/, 'the message warns against re-initializing over the file');
       fs.writeFileSync(path.join(home, '.egc', 'team.json'), JSON.stringify({ backend: 'git', remote: path.join(home, 'x.git'), branch: 'main', teamKey: teamKey.toString('hex') }));
-      const child = spawn(process.execPath, [MESH_CLI, 'serve', '--port', '0', '--host', '127.0.0.1'], { env });
-      const exited = new Promise(resolve => child.on('exit', resolve));
+      child = spawn(process.execPath, [MESH_CLI, 'serve', '--port', '0', '--host', '127.0.0.1'], { env });
+      exited = new Promise(resolve => child.on('exit', resolve));
       const port = await within(new Promise(resolve => {
         let out = '';
         child.stdout.on('data', chunk => {
@@ -226,14 +239,18 @@ async function runTests() {
           const match = /listening on 127\.0\.0\.1:(\d+)/.exec(out);
           if (match) resolve(Number(match[1]));
         });
-      }), 'the central to listen');
+      }), 'the central to listen', CLI_TIMEOUT_MS);
       const a = connectMachine(port, A, authKey);
       await a.next('welcome');
       a.close();
       await a.closed;
       child.kill('SIGTERM');
-      await within(exited, 'the central to stop');
+      await within(exited, 'the central to stop', CLI_TIMEOUT_MS);
     } finally {
+      if (child && child.exitCode === null && child.signalCode === null) {
+        child.kill('SIGKILL');
+        await exited;
+      }
       fs.rmSync(home, { recursive: true, force: true });
     }
   });

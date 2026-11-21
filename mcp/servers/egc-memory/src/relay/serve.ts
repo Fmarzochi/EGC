@@ -1,12 +1,17 @@
+import fs from 'node:fs';
+
 import { parseTeamKey } from '../sync/envelope';
-import { getTeamConfig } from '../sync/TeamSync';
+import { TEAM_CONFIG_PATH, getTeamConfig } from '../sync/TeamSync';
 import { startHub } from './hub';
 import { DEFAULT_MESH_PORT, meshAuthKey } from './protocol';
 
 // `egc mesh serve`: the central in the foreground, letting in the machines
 // that hold this machine's team key. The key is read from ~/.egc/team.json,
 // never from the command line, and only the key derived from it for the
-// challenge reaches the central.
+// challenge reaches the central: the central process cannot open a box.
+// The machine that runs this command does hold the team key, so it is a
+// machine of the person's own; the credential that lets a rented server
+// hold the challenge key alone comes with the guide of that option.
 export interface ServeArgs { port: number; host: string }
 
 export const SERVE_USAGE = 'Usage: egc mesh serve [--port <0-65535>, default 47470] [--host <address>, default 0.0.0.0]';
@@ -44,7 +49,12 @@ export async function main(argv: readonly string[]): Promise<void> {
   }
   const teamKey = parseTeamKey(getTeamConfig()?.teamKey);
   if (!teamKey) {
-    process.stderr.write('No team on this machine: run `egc team init` first. The central lets in the machines that hold the key of the team.\n');
+    // A configuration that exists but holds no usable key is repaired or
+    // restored, never re-initialized: `egc team init` without `--key`
+    // would write a new key over it.
+    process.stderr.write(fs.existsSync(TEAM_CONFIG_PATH)
+      ? `The team configuration at ${TEAM_CONFIG_PATH} holds no valid team key: repair or restore that file. Do not run \`egc team init\` without \`--key\` for it, since that writes a new key over the file.\n`
+      : 'No team on this machine: run `egc team init` first. The central lets in the machines that hold the key of the team.\n');
     process.exitCode = 1;
     return;
   }
