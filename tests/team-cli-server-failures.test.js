@@ -42,6 +42,7 @@ function makeTree(base) {
     ['scripts/lib/team-mcp-client.js', 'scripts/lib/team-mcp-client.js'],
     ['scripts/lib/team-config.js', 'scripts/lib/team-config.js'],
     ['scripts/lib/team-autosync.js', 'scripts/lib/team-autosync.js'],
+    ['scripts/lib/relay-module.js', 'scripts/lib/relay-module.js'],
     ['tests/fixtures/fake-memory-server.js', 'mcp/servers/egc-memory/build/index.js'],
   ];
   for (const [from, to] of copies) {

@@ -228,7 +228,9 @@ export async function invite(options: InviteOptions): Promise<PairOutcome> {
   const port = (server.address() as net.AddressInfo).port;
   const wildcard = WILDCARD_HOSTS.has(host);
   const announcement = options.announce !== false && wildcard ? announceInvitation(port, options.name) : null;
-  options.onReady?.({ port, addresses: wildcard ? lanAddresses() : [host], announced: announcement !== null });
+  // The addresses as the person types them before the port: an IPv6 one in brackets.
+  const shown = wildcard ? lanAddresses() : [host.includes(':') ? `[${host}]` : host];
+  options.onReady?.({ port, addresses: shown, announced: announcement !== null });
 
   const outcome = await new Promise<PairOutcome>(resolve => {
     let taken = false;
