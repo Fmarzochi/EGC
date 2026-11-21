@@ -111,6 +111,7 @@ export async function sweepDead(db: BusDb, nowMs: number = Date.now()): Promise<
   const eventCutoff = new Date(nowMs - EVENT_TTL_SECONDS * 1000).toISOString();
   await db.run('DELETE FROM bus_events WHERE created_at < ?', eventCutoff);
   await db.run('DELETE FROM bus_event_cursors WHERE session_id NOT IN (SELECT id FROM bus_sessions)');
+  await db.run('DELETE FROM mesh_inbound_events WHERE event_id NOT IN (SELECT id FROM bus_events)');
 }
 
 export async function announce(
@@ -343,7 +344,11 @@ function inboundDestinations(event: SharedEvent, sessions: Record<string, unknow
   if (event.to_session) {
     const target = sessions.find(row => rowText(row.id) === event.to_session);
     if (!target) return null;
-    return [target.project_path ? rowText(target.project_path) : null];
+    const targetPath = target.project_path ? rowText(target.project_path) : null;
+    // A direct event names its repository; the target session has to be in
+    // that repository, not merely carry the id the sender asked for.
+    if (event.project_key && projectKeyOf(targetPath) !== event.project_key) return null;
+    return [targetPath];
   }
   if (!event.project_key) return [null];
   const checkouts = new Set<string>();
@@ -609,14 +614,16 @@ function cleanSharedLock(value: unknown): SharedLock | null {
 // snapshot of another machine's locks, a box taken and what it said. SQLite
 // has no nested transactions, so the callers do not open their own inside.
 export async function withBusTransaction<T>(db: BusDb, work: () => Promise<T>): Promise<T> {
-  await db.run('BEGIN IMMEDIATE');
+  // Transaction control goes through exec: the portable adapter tracks the
+  // transaction there, and holds it until the commit.
+  await db.exec('BEGIN IMMEDIATE');
   try {
     const result = await work();
-    await db.run('COMMIT');
+    await db.exec('COMMIT');
     return result;
   } catch (error) {
     try {
-      await db.run('ROLLBACK');
+      await db.exec('ROLLBACK');
     } catch {
       // the transaction is gone already
     }
