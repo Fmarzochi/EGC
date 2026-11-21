@@ -67,7 +67,7 @@ export interface FoundCentral {
 // An IPv4 address first, since it is the plain host:port the configuration
 // reads; an IPv6 one in brackets otherwise; nothing when the record came
 // without an address.
-function pickAddress(service: Service): string | null {
+export function pickAddress(service: Service): string | null {
   const addresses = service.addresses ?? [];
   const v4 = addresses.find(address => /^\d{1,3}(?:\.\d{1,3}){3}$/.test(address));
   if (v4) return v4;

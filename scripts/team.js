@@ -5,9 +5,11 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 
 const os = require('node:os');
+const readline = require('node:readline');
 const { execFileSync } = require('node:child_process');
 
 const { callMcpTool: callMemoryTool } = require('./lib/team-mcp-client');
+const { NOT_BUILT, loadRelay } = require('./lib/relay-module');
 const { teamConfigPath, readTeamConfig, publishTeamConfigText, writeTeamConfig } = require('./lib/team-config');
 const { lastAutosync, clearAutosyncStamp } = require('./lib/team-autosync');
 
@@ -72,6 +74,8 @@ EGC Team Memory: Sync state across teammates
 
 Usage:
   egc team init --backend <backend> --remote <url> [--branch <branch>] [--key <hex>] [--no-autosync]
+  egc team invite [--port <n>] [--host <address>] [--no-announce]
+  egc team join [<host:port>]
   egc team sync
   egc team autosync on|off
   egc team leave
@@ -79,6 +83,10 @@ Usage:
 
 Commands:
   init      Configure a sync backend (e.g. git) and a remote URL
+  invite    Hand the team to a new machine of yours by a short code: both screens show the same six
+            digits, you confirm on both, and the key crosses sealed by the exchange (no key to copy)
+  join      Join the team of your other machine by a short code: finds its invitation on the local
+            network, or takes its address
   sync      Pull the teammates' sealed state, merge it, and push local state sealed with the team key
   autosync  Turn the sync around the session on or off: a sync when a session starts, before the
             state is read, and one after a response that changed the state (on from init)
@@ -97,6 +105,9 @@ Examples:
   egc team init --backend git --remote git@github.com:org/egc-memory
   egc team init --backend git --remote git@github.com:org/egc-memory --branch team
   egc team init --backend git --remote git@github.com:org/egc-memory --key <hex> --no-autosync
+  egc team invite                      # on a machine of the team
+  egc team join                        # on the new machine, same network
+  egc team join 192.168.1.50:51234     # where the invitation is not found by itself
   egc team sync
   egc team autosync off
   egc team leave
@@ -283,6 +294,85 @@ function handleLeave() {
 To join again: egc team init --backend ${config.backend ?? 'git'} --remote ${remote}${branch} --key <team key>`);
 }
 
+const TEAM_KEY_RE = /^[0-9a-f]{64}$/i;
+
+// The person, asked on this screen whether the other one shows the same code.
+function askSameCode(pairing) {
+  return code => new Promise(resolve => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(`\nCode: ${pairing.formatCode(code)}\nThe same six digits on the other screen? [y/N] `, answer => {
+      rl.close();
+      // A piped stdin would keep the process alive after the answer.
+      if (typeof process.stdin.unref === 'function') process.stdin.unref();
+      resolve(/^y(?:es)?$/i.test(answer.trim()));
+    });
+  });
+}
+
+function loadPairing() {
+  const pairing = loadRelay('pairing');
+  if (!pairing) {
+    console.error(NOT_BUILT.trim());
+    process.exit(1);
+  }
+  return pairing;
+}
+
+async function handleInvite(args) {
+  const pairing = loadPairing();
+  const team = readTeamConfig();
+  if (!team || !TEAM_KEY_RE.test(team.teamKey ?? '')) {
+    console.error('No team on this machine: run `egc team init` first, or join the team of your other machine with `egc team join`.');
+    process.exit(1);
+  }
+  const port = Number(optionValue(args, '--port', '0'));
+  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+    console.error('Error: --port takes a number from 0 to 65535');
+    process.exit(1);
+  }
+  const central = loadRelay('mesh-config')?.readMeshConfig()?.central ?? null;
+  const outcome = await pairing.invite({
+    team,
+    central,
+    port,
+    host: optionValue(args, '--host', '0.0.0.0'),
+    announce: !args.includes('--no-announce'),
+    confirm: askSameCode(pairing),
+    onReady: info => {
+      const where = info.addresses.length > 0 ? info.addresses.map(address => `${address}:${info.port}`).join('  or  ') : `<this machine>:${info.port}`;
+      const found = info.announced ? '\n  egc team join                 (finds this machine on the local network)' : '';
+      console.log(`Waiting for your other machine (5 min). On it, run:${found}\n  egc team join ${where}`);
+    },
+  });
+  if (!outcome.paired) {
+    console.error(`Not paired: ${outcome.reason}`);
+    process.exit(1);
+  }
+  console.log('Your other machine joined the team. Its sessions sync from here on; on it, `egc team sync` pulls the state now.');
+}
+
+async function handleJoin(args) {
+  const pairing = loadPairing();
+  const existing = readTeamConfig();
+  if (existing && TEAM_KEY_RE.test(existing.teamKey ?? '')) {
+    console.error(`This machine already has a team (${displayRemote(existing.remote)}): run \`egc team leave\` first to join another.`);
+    process.exit(1);
+  }
+  const address = args[1] && !args[1].startsWith('--') ? args[1] : undefined;
+  if (!address) console.log('Looking for an invitation on the local network (3 s). On your other machine, run `egc team invite`.');
+  const outcome = await pairing.join({ address, confirm: askSameCode(pairing) });
+  if (!outcome.paired) {
+    console.error(`Not joined: ${outcome.reason}`);
+    process.exit(1);
+  }
+  console.log(`Joined the team:
+  Remote:  ${displayRemote(outcome.team.remote)}
+  Branch:  ${outcome.team.branch}
+  Central: ${outcome.central ?? 'none yet (egc mesh connect when there is one)'}
+  Config:  ${TEAM_CONFIG_PATH}
+Run \`egc team sync\` to pull the state of your other machines now; the sessions sync by themselves from here on.`);
+}
+
 async function handleSync() {
   const config = readTeamConfig();
   if (!config) {
@@ -377,6 +467,14 @@ async function main() {
   switch (firstArg) {
     case 'init':
       await handleInit(args);
+      break;
+
+    case 'invite':
+      await handleInvite(args);
+      break;
+
+    case 'join':
+      await handleJoin(args);
       break;
 
     case 'sync':
