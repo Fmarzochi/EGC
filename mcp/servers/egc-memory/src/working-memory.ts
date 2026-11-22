@@ -1,5 +1,5 @@
 import type { Database } from 'sqlite';
-import { randomUUID } from 'node:crypto';
+import { SAME_PROJECT_SQL, machineLabel, projectKeyOf, upsertWorkingMemory } from './sync/records';
 
 // TTL used when the caller does not supply one: one calendar day in seconds.
 // Entries without an explicit TTL are swept by the next get_state or working
@@ -13,16 +13,25 @@ export interface WorkingMemoryEntry {
   key: string;
   value: string;
   expires_at: number;
+  // The repository by its remote (null without one), the machine that wrote
+  // the entry and the time of that write in seconds since the epoch; a row
+  // written before these columns existed carries null, null and 0.
+  project_key?: string | null;
+  machine_label?: string | null;
+  updated_at?: number;
 }
 
 export async function createWorkingMemoryTable(db: Database): Promise<void> {
   await db.exec(`
     CREATE TABLE IF NOT EXISTS working_memory (
-      id          TEXT    PRIMARY KEY,
-      project_path TEXT   NOT NULL,
-      key         TEXT    NOT NULL,
-      value       TEXT    NOT NULL,
-      expires_at  INTEGER NOT NULL,
+      id            TEXT    PRIMARY KEY,
+      project_path  TEXT    NOT NULL,
+      project_key   TEXT,
+      key           TEXT    NOT NULL,
+      value         TEXT    NOT NULL,
+      expires_at    INTEGER NOT NULL,
+      machine_label TEXT,
+      updated_at    INTEGER NOT NULL DEFAULT 0,
       UNIQUE (project_path, key)
     );
   `);
@@ -72,19 +81,19 @@ export async function setWorkingMemory(
   const ttl = (ttlSeconds !== undefined && ttlSeconds > 0)
     ? ttlSeconds
     : SESSION_TTL_SECONDS;
-  const expiresAt = Math.floor(Date.now() / 1000) + ttl;
-  const id = randomUUID();
-
-  // Upsert: replace any existing entry for the same project+key.
-  await db.run(
-    `INSERT INTO working_memory (id, project_path, key, value, expires_at)
-     VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(project_path, key) DO UPDATE SET
-       id         = excluded.id,
-       value      = excluded.value,
-       expires_at = excluded.expires_at`,
-    [id, projectPath, key, value, expiresAt]
-  );
+  const now = Math.floor(Date.now() / 1000);
+  // The write lands on the row this repository has here, whatever the folder
+  // it was first written under, and carries the key of the project, the name
+  // of this machine and its own time.
+  await upsertWorkingMemory(db, {
+    projectPath,
+    projectKey: projectKeyOf(projectPath),
+    key,
+    value,
+    expiresAt: now + ttl,
+    machine: machineLabel(),
+    updatedAt: now,
+  }, false);
 }
 
 export async function getWorkingMemory(
@@ -95,8 +104,8 @@ export async function getWorkingMemory(
   await sweepExpiredOnRead(db);
   const now = Math.floor(Date.now() / 1000);
   const row = await db.get<WorkingMemoryEntry>(
-    'SELECT * FROM working_memory WHERE project_path = ? AND key = ? AND expires_at > ?',
-    [projectPath, key, now]
+    `SELECT * FROM working_memory WHERE ${SAME_PROJECT_SQL} AND key = ? AND expires_at > ? ORDER BY updated_at DESC, expires_at DESC LIMIT 1`,
+    [projectKeyOf(projectPath), projectPath, key, now]
   );
   return row ?? null;
 }
@@ -107,8 +116,16 @@ export async function listWorkingMemory(
 ): Promise<WorkingMemoryEntry[]> {
   await sweepExpiredOnRead(db);
   const now = Math.floor(Date.now() / 1000);
-  return db.all<WorkingMemoryEntry[]>(
-    'SELECT * FROM working_memory WHERE project_path = ? AND expires_at > ? ORDER BY key',
-    [projectPath, now]
+  const rows = await db.all<WorkingMemoryEntry[]>(
+    `SELECT * FROM working_memory WHERE ${SAME_PROJECT_SQL} AND expires_at > ? ORDER BY key, updated_at DESC, expires_at DESC`,
+    [projectKeyOf(projectPath), projectPath, now]
   );
+  // One entry per key: the latest write, when this machine and another wrote
+  // the same key for the same repository under folders of their own.
+  const seen = new Set<string>();
+  return rows.filter(row => {
+    if (seen.has(row.key)) return false;
+    seen.add(row.key);
+    return true;
+  });
 }
