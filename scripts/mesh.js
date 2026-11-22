@@ -10,13 +10,16 @@ const path = require('node:path');
 
 const RELAY_RELATIVE = ['mcp', 'servers', 'egc-memory', 'build', 'relay'];
 const USAGE = [
-  'Usage: egc mesh <serve [--port <n>] [--host <address>] | connect <address> | disconnect | status | label <name>>',
+  'Usage: egc mesh <serve [--port <n>] [--host <address>] [--no-announce] | connect [<address>] | find | disconnect | status | label <name>>',
   '',
   '  serve             Run the central that relays between your machines (port 47470 by default;',
-  '                    --port and --host change where it listens).',
-  '                    It lets in the machines that hold the key of this machine\'s team (egc team init).',
-  '  connect <addr>    Point this machine at a central (host:port, a host alone for port 47470,',
-  '                    or a ws:// or wss:// URL). The memory servers connect from their next start.',
+  '                    --port and --host change where it listens; it announces itself on the local',
+  '                    network unless --no-announce). It lets in the machines that hold the key of',
+  '                    this machine\'s team (egc team init).',
+  '  connect [<addr>]  Point this machine at a central (host:port, a host alone for port 47470,',
+  '                    or a ws:// or wss:// URL). With no address, the central of your team on the',
+  '                    local network is found (3 s). The memory servers connect from their next start.',
+  '  find              List the centrals of your team that answer on the local network.',
   '  disconnect        Forget the central: the machine works alone again, and a running bridge',
   '                    steps down within half a minute.',
   '  status            This machine on the mesh: identity, central, connection, machines online.',
@@ -45,31 +48,7 @@ function loadRelay(name) {
   return script ? require(script) : null;
 }
 
-function readStatusFile(file) {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-    return parsed && typeof parsed === 'object' ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-function processAlive(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return error.code === 'EPERM';
-  }
-}
-
-// The bridge refreshes its status file with every presence (30 s): a file
-// older than two minutes, or whose process is gone, belongs to a bridge that
-// is gone.
-function isLiveStatus(status) {
-  if (!status || typeof status.updatedAt !== 'string' || !Number.isInteger(status.pid)) return false;
-  return Date.now() - Date.parse(status.updatedAt) < 2 * 60 * 1000 && processAlive(status.pid);
-}
+const { readStatusFile, isLiveStatus, describeBridge, describeOnline } = require('./lib/mesh-status');
 
 function showStatus() {
   const machineModule = loadRelay('machine');
@@ -95,36 +74,65 @@ function showStatus() {
   process.stdout.write(`${lines.join('\n')}\n`);
 }
 
-// A live bridge still attached to a central that is no longer the configured
-// one is in transition: it steps down and the new central is joined within
-// one election period.
-function describeBridge(status, live, central) {
-  if (!live) return 'not running (starts with the next memory server)';
-  const pid = `pid ${status.pid}`;
-  if (status.central !== central) return `moving to the new central (pid ${status.pid}, still on ${status.central}; the change takes up to half a minute)`;
-  return status.connected === true ? `connected (${pid})` : `reconnecting (${pid})`;
+// The centrals of this machine's team on the local network, listed; null
+// when the mesh cannot be searched (no build, no team), an empty list when
+// nothing of the team answered.
+async function findCentrals() {
+  const discovery = loadRelay('discovery');
+  const teamSync = loadRelay('../sync/TeamSync');
+  const envelope = loadRelay('../sync/envelope');
+  if (!discovery || !teamSync || !envelope) {
+    process.stderr.write(NOT_BUILT);
+    process.exitCode = 1;
+    return null;
+  }
+  const teamKey = envelope.parseTeamKey(teamSync.getTeamConfig()?.teamKey);
+  if (!teamKey) {
+    process.stderr.write('No team on this machine: run `egc team init` (with --key to join one). The central of your team is found by its key.\n');
+    process.exitCode = 1;
+    return null;
+  }
+  process.stdout.write('Looking for the central of your team on the local network (3 s)...\n');
+  let found;
+  try {
+    found = await discovery.discoverCentrals({ teamKey });
+  } catch (error) {
+    process.stderr.write(`The local network could not be searched: ${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
+    return null;
+  }
+  if (found.length === 0) {
+    process.stdout.write('No central of your team answered on this network. Start one with `egc mesh serve`, or give its address: egc mesh connect <host:port>.\n');
+    return found;
+  }
+  for (const central of found) process.stdout.write(`- ${central.address}  ${central.name}\n`);
+  return found;
 }
 
-function describeOnline(status, live) {
-  const online = live && Array.isArray(status.online) ? status.online : [];
-  if (online.length === 0) return 'no other machine seen';
-  return `${online.length} other machine(s)`;
-}
-
-function connectCentral(address) {
+async function connectCentral(address) {
   const configModule = loadRelay('mesh-config');
   if (!configModule) {
     process.stderr.write(NOT_BUILT);
     process.exitCode = 1;
     return;
   }
-  if (!address) {
-    process.stderr.write(`connect needs the address of the central.\n${USAGE}\n`);
-    process.exitCode = 2;
-    return;
+  let target = address;
+  if (!target) {
+    const found = await findCentrals();
+    if (found === null) return;
+    if (found.length === 0) {
+      process.exitCode = 1;
+      return;
+    }
+    if (found.length > 1) {
+      process.stdout.write('More than one central of your team answered: choose one with egc mesh connect <address>.\n');
+      process.exitCode = 2;
+      return;
+    }
+    target = found[0].address;
   }
   try {
-    const config = configModule.writeMeshConfig(address);
+    const config = configModule.writeMeshConfig(target);
     process.stdout.write(`Central: ${config.central}\nThe memory servers of this machine connect from their next start; egc mesh status shows the connection.\n`);
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
@@ -171,6 +179,11 @@ async function main(argv) {
   }
   if (subcommand === 'status') return showStatus();
   if (subcommand === 'connect') return connectCentral(rest[0]);
+  if (subcommand === 'find') {
+    const found = await findCentrals();
+    if (found !== null && found.length === 0) process.exitCode = 1;
+    return;
+  }
   if (subcommand === 'disconnect') return disconnectCentral();
   if (subcommand === 'label') return relabel(rest.join(' '));
   if (subcommand !== 'serve') {

@@ -50,27 +50,30 @@ function writeState(filePath, options) {
 // HOME/USERPROFILE here and calling it in-process reproduces exactly what
 // the spawned child (run() below, which sets the same two vars) will resolve.
 function computeEGCDirForHome(homeDir) {
-  const previousHome = process.env.HOME;
-  const previousUserProfile = process.env.USERPROFILE;
+  const previous = {};
+  for (const key of ['HOME', 'USERPROFILE', ...HARNESS_ENV_OVERRIDES]) previous[key] = process.env[key];
   process.env.HOME = homeDir;
   process.env.USERPROFILE = homeDir;
+  // The variables a harness injects into its hooks (CLAUDECODE when this
+  // test runs from inside Claude Code, for one) would move the EGC
+  // directory into that harness's folder; the child below never sees them,
+  // so the computation here must not either.
+  for (const key of HARNESS_ENV_OVERRIDES) delete process.env[key];
   try {
     return getEGCDir();
   } finally {
-    if (previousHome === undefined) {
-      delete process.env.HOME;
-    } else {
-      process.env.HOME = previousHome;
-    }
-    if (previousUserProfile === undefined) {
-      delete process.env.USERPROFILE;
-    } else {
-      process.env.USERPROFILE = previousUserProfile;
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
     }
   }
 }
 
 const HOST_CONFIG_PATH_OVERRIDES = ['XDG_CONFIG_HOME', 'KIMI_CODE_HOME', 'CRUSH_GLOBAL_CONFIG', 'VIBE_HOME', 'CODEX_HOME', 'APPDATA'];
+// What resolveHarnessDirFromEnv (scripts/lib/utils-paths.js) reads: present
+// in the shell of an AI tool, they would point the doctor at that tool's
+// folder instead of the temporary home of a case.
+const HARNESS_ENV_OVERRIDES = ['EGC_DIR', 'CLAUDECODE', 'CLAUDE_PROJECT_DIR', 'CLAUDE_PLUGIN_ROOT', 'GEMINI_PROJECT_DIR', 'GEMINI_PLUGIN_ROOT', 'CODEBUDDY_PROJECT_DIR', 'CODEBUDDY_PLUGIN_ROOT', 'VSCODE_AGENT', 'GITHUB_COPILOT_API_TOKEN', 'KIRO_HOOK_FILE', 'KIRO_FILE_PATH', 'TRAE_ENV'];
 
 function run(args = [], options = {}) {
   const env = {
@@ -80,7 +83,7 @@ function run(args = [], options = {}) {
     ...(options.env || {}),
   };
   if (options.homeDir) {
-    for (const key of HOST_CONFIG_PATH_OVERRIDES) {
+    for (const key of [...HOST_CONFIG_PATH_OVERRIDES, ...HARNESS_ENV_OVERRIDES]) {
       if (!Object.hasOwn(options.env || {}, key)) delete env[key];
     }
   }
@@ -1296,6 +1299,7 @@ function runTests() {
       const result = run([], { cwd: projectRoot, homeDir });
       assert.strictEqual(result.code, 0, result.stdout + result.stderr);
       assert.ok(result.stdout.includes('Team: not configured (egc team init --backend git --remote <url>, with --key <team key> to join a team)'), result.stdout);
+      assert.ok(result.stdout.includes('Mesh: not configured (egc mesh connect <address> joins the central of your team; egc mesh serve starts one)'), result.stdout);
       assert.ok(result.stdout.includes('Summary: checked=0, ok=0, warnings=0, errors=0'), result.stdout);
       const asJson = run(['--json'], { cwd: projectRoot, homeDir });
       assert.strictEqual(JSON.parse(asJson.stdout).team.configured, false);

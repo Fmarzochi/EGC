@@ -166,6 +166,13 @@ async function shutdown() {
     await bridgeHandle.stop().catch(() => undefined);
     bridgeHandle = null;
   }
+  // A sync a write of the last seconds scheduled runs now, not never.
+  try {
+    const { flushScheduledSync } = await import('./memory-notify.js');
+    await flushScheduledSync();
+  } catch (error) {
+    log('WARN', 'The sync scheduled by a write did not run before the shutdown', { error: String(error) });
+  }
   await closeDb();
   if (transport) {
     await server.close();

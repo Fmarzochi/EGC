@@ -13,6 +13,8 @@ import { teamInit, teamSync, teamStatus } from './sync/TeamSync.js';
 import { machineLabel, newRecordId, projectKeyOf } from './sync/records.js';
 import { resolveStateStoreDbPath } from './state-store-path.js';
 import { setWorkingMemory, getWorkingMemory, listWorkingMemory } from './working-memory';
+import { BUS_SESSION_ID } from './memory-session-bus';
+import { notifyMemoryChanged } from './memory-notify';
 
 export const WORKING_MEMORY_MAX_TTL_SECONDS = 604800; // 7 days: longer-lived data belongs in update_state, not working memory.
 
@@ -113,6 +115,7 @@ export async function handleStoreDecision(db: Database, toolArgs: unknown) {
   await writeArbitrator.enqueue(async () => {
     await db.run('INSERT INTO decisions (record_id, context, decision, project_path, project_key, machine_label) VALUES (?, ?, ?, ?, ?, ?)', [recordId, cleaned.sanitized.context, cleaned.sanitized.decision, decisionProjPath, projectKeyOf(decisionProjPath), machine]);
   });
+  await notifyMemoryChanged(db, BUS_SESSION_ID, { kind: 'decision', projectPath: decisionProjPath ?? null });
 
   log('INFO', 'Decision stored securely via Queue Arbitration');
   return { content: [{ type: "text", text: "Decision stored securely." }] };
@@ -144,6 +147,7 @@ export async function handleWorkingMemorySet(db: Database, toolArgs: unknown) {
   await writeArbitrator.enqueue(async () => {
     await setWorkingMemory(db, projPath, args.key, args.value, args.ttl_seconds);
   });
+  await notifyMemoryChanged(db, BUS_SESSION_ID, { kind: 'working-memory', projectPath: projPath ?? null });
   const ttl = args.ttl_seconds ?? 86400;
   log('INFO', 'Working memory entry stored', { project: projPath, key: args.key, ttl });
   return { content: [{ type: "text", text: `Working memory entry stored: key="${args.key}", ttl=${ttl}s` }] };

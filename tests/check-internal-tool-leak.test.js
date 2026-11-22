@@ -84,6 +84,14 @@ run('tree mode flags a committed file', () => {
   assert.ok(res.stderr.includes('NOTES.md'));
 });
 
+run('a technical word that merely begins with the term is not a leak', () => {
+  const { dir, git } = makeRepo();
+  fs.writeFileSync(path.join(dir, 'NOTES.md'), 'The central announces itself by multicast DNS; multicast-dns is the library.\n');
+  git('add', 'NOTES.md');
+  const res = runScript(dir, '--staged');
+  assert.strictEqual(res.status, 0, `expected exit 0, got ${res.status}: ${res.stderr}`);
+});
+
 run('clean staged content passes', () => {
   const { dir, git } = makeRepo();
   fs.writeFileSync(path.join(dir, 'NOTES.md'), 'An independent security audit found 3 bugs.\n');
