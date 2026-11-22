@@ -63,7 +63,7 @@ egc team sync   # by hand; the sessions also sync by themselves on a machine who
 
 ### Session Mesh: Your Open Sessions See Each Other
 
-Two Cursor tabs, a Claude Code terminal and an Antigravity session share one live bus. They announce what they are working on, claim the files they edit, hand work to each other and pick up events: a session parked in `session_wait` wakes the moment one lands, the tools with a turn hook that can inject context (Claude Code, Antigravity, Codex, Trae, Amp, Kiro and OpenCode 2) get the notice at their next turn, and Cursor or Copilot read the bus through the session tools. Parallel sessions cooperate instead of colliding.
+Two Cursor tabs, a Claude Code terminal and an Antigravity session share one live bus. They announce what they are working on, claim the files they edit, hand work to each other and pick up events: a session parked in `session_wait` wakes the moment one lands, the tools with a turn hook that can inject context (Claude Code, Antigravity, Codex, Trae, Amp, Kiro and OpenCode 2) get the notice at their next turn, and Cursor or Copilot read the bus through the session tools. Parallel sessions cooperate instead of colliding. With `egc mesh serve` on one of your machines, the bus crosses to your other machines too, sealed end to end and with no server of ours; the [Team Brain guide](docs/TEAM-BRAIN.md#your-machines-in-real-time-the-mesh-first-steps) shows the five places the central can run.
 
 ### Guardian: A Safety Layer in Front of Every Command
 
