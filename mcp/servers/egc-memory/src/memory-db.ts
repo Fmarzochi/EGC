@@ -7,6 +7,7 @@ import { resolveHome } from './home';
 import { createSearchIndex, rebuildSearchIndex, createLessonsSearchIndex, rebuildLessonsSearchIndex } from './search.js';
 import { createSessionBusTables } from './session-bus';
 import { createWorkingMemoryTable, createWorkingMemoryExpiryIndex } from './working-memory';
+import { projectKeyOf } from './sync/records';
 import { SQLiteArbitrationQueue } from './write-queue';
 
 let searchIndexReady = false;
@@ -113,6 +114,62 @@ export async function acquireMigrationLock(lockFile: string): Promise<void> {
     }
   }
   if (!locked) throw new Error('Timeout acquiring migration lock');
+}
+
+const RECORD_TABLES = ['lessons', 'decisions', 'working_memory'] as const;
+
+// The projects already in the three tables get their key from their path,
+// so the records written before the sync carried them name their repository.
+async function backfillProjectKeys(db: Database): Promise<void> {
+  const perTable = await Promise.all(RECORD_TABLES.map(table =>
+    db.all<{ project_path: string }[]>(`SELECT DISTINCT project_path FROM ${table} WHERE project_path IS NOT NULL AND project_key IS NULL`) // NOSONAR: the table is one of three fixed names
+  ));
+  const updates: Promise<unknown>[] = [];
+  RECORD_TABLES.forEach((table, index) => {
+    for (const { project_path: projectPath } of perTable[index]) {
+      const key = projectKeyOf(projectPath);
+      if (key) updates.push(db.run(`UPDATE ${table} SET project_key = ? WHERE project_path = ? AND project_key IS NULL`, [key, projectPath])); // NOSONAR: the table is one of three fixed names
+    }
+  });
+  await Promise.all(updates);
+}
+
+interface ColumnSpec { table: string; column: string; definition: string }
+
+// The columns of migration 15, on the three tables the records come from.
+const RECORD_COLUMNS: readonly ColumnSpec[] = [
+  { table: 'decisions', column: 'record_id', definition: 'TEXT' },
+  { table: 'decisions', column: 'project_key', definition: 'TEXT' },
+  { table: 'decisions', column: 'machine_label', definition: 'TEXT' },
+  { table: 'lessons', column: 'project_key', definition: 'TEXT' },
+  { table: 'lessons', column: 'machine_label', definition: 'TEXT' },
+  { table: 'working_memory', column: 'project_key', definition: 'TEXT' },
+  { table: 'working_memory', column: 'machine_label', definition: 'TEXT' },
+  { table: 'working_memory', column: 'updated_at', definition: 'INTEGER NOT NULL DEFAULT 0' },
+];
+
+// A column added once: a start cut short before the marker of its migration
+// finds the columns it added already, and a table created with them finds
+// nothing to add.
+async function addColumnIfMissing(db: Database, spec: ColumnSpec): Promise<void> {
+  const columns = await db.all<{ name: string }[]>(`PRAGMA table_info(${spec.table})`); // NOSONAR: the table is one of three fixed names
+  if (columns.some(column => column.name === spec.column)) return;
+  await db.exec(`ALTER TABLE ${spec.table} ADD COLUMN ${spec.column} ${spec.definition}`); // NOSONAR: names and definitions from the fixed list above
+}
+
+// Migration 15: the records the team sync carries (lessons, decisions,
+// working memory): a stable id for each decision, the key of the project by
+// its remote on the three tables, so the same repository under two folders
+// meets, the label of the machine a record was written on, and the time of
+// each write of working memory. Every step resumes where a start cut short
+// left it, so the marker is written only once all of them hold.
+async function migrateRecords(db: Database): Promise<void> {
+  await RECORD_COLUMNS.reduce((chain, spec) => chain.then(() => addColumnIfMissing(db, spec)), Promise.resolve());
+  await db.exec(`
+    UPDATE decisions SET record_id = lower(hex(randomblob(16))) WHERE record_id IS NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_decisions_record_id ON decisions(record_id);
+  `);
+  await backfillProjectKeys(db);
 }
 
 async function runMigrations(db: Database, dbDir: string) {
@@ -260,6 +317,13 @@ async function runMigrations(db: Database, dbDir: string) {
     if (!hasV14) {
       await createSessionBusTables(db);
       await db.run('INSERT INTO schema_migrations (version) VALUES (14)');
+    }
+
+    // Migration 15: the records the team sync carries (migrateRecords above).
+    const hasV15 = await db.get('SELECT version FROM schema_migrations WHERE version = 15');
+    if (!hasV15) {
+      await migrateRecords(db);
+      await db.run('INSERT INTO schema_migrations (version) VALUES (15)');
     }
 
     const bootRow = await db.get<{value: string}>('SELECT value FROM operational_state WHERE id = ?', ['server_boot_count']);
