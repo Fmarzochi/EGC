@@ -27,6 +27,11 @@ RUN cd /tmp/mcp-proxy-install && npm ci --silent && \
 # builder so the build toolchain and its layers never reach the runtime image.
 COPY --from=builder --chown=node:node /app /app
 
+# The home of EGC inside the image, owned by the user that runs it: a named
+# volume mounted there starts with this owner, so the team configuration can
+# be written and the central can run without root.
+RUN mkdir -p /home/node/.egc && chown node:node /home/node/.egc && chmod 700 /home/node/.egc
+
 # Drop root: the node base image ships an unprivileged "node" user.
 USER node
 
