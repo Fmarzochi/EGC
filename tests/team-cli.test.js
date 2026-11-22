@@ -89,11 +89,38 @@ function treeDigest(root) {
   return digest;
 }
 
-function teamCli(args) {
+// Every file under the given roots with its size and its time (the logs
+// left out), for a command that must write nothing to be checked against.
+function fingerprint(...roots) {
+  const lines = [];
+  const walk = (dir, base) => {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.name === 'logs') continue;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full, base);
+      } else {
+        const stat = fs.lstatSync(full);
+        lines.push(`${path.relative(base, full)}:${stat.size}:${stat.mtimeMs}`);
+      }
+    }
+  };
+  for (const root of roots) walk(root, root);
+  return lines.sort().join('\n');
+}
+
+function teamCli(args, input) {
   return spawnSync(process.execPath, [TEAM_CLI, ...args], {
     encoding: 'utf8',
     env: TEST_ENV,
     timeout: CLI_TIMEOUT_MS,
+    input,
   });
 }
 
@@ -235,6 +262,45 @@ function runTests() {
       } finally {
         fs.writeFileSync(configPath, saved);
       }
+    });
+
+    run('team init with --key alone reads the key typed without showing it, and never prints it', () => {
+      const configPath = path.join(HOME, '.egc', 'team.json');
+      const saved = fs.readFileSync(configPath, 'utf8');
+      const key = JSON.parse(saved).teamKey;
+      try {
+        const run = teamCli(['init', '--backend', 'git', '--remote', REMOTE, '--key'], `${key}\n`);
+        assert.strictEqual(run.status, 0, `the typed key is accepted:\n${run.stdout}\n${run.stderr}`);
+        assert.ok(run.stderr.includes('Team key (64 hexadecimal characters, not shown):'), `the prompt is shown:\n${run.stderr}`);
+        assert.ok(!run.stdout.includes(key) && !run.stderr.includes(key), 'the key is never printed');
+        assert.strictEqual(JSON.parse(fs.readFileSync(configPath, 'utf8')).teamKey, key, 'the typed key is the key of the configuration');
+      } finally {
+        fs.writeFileSync(configPath, saved);
+      }
+    });
+
+    run('team init with --key alone and a value that is not a key exits 1 and writes nothing', () => {
+      const configPath = path.join(HOME, '.egc', 'team.json');
+      const saved = fs.readFileSync(configPath, 'utf8');
+      // Everything the command could touch, before: the configuration, the
+      // checkout and the state under ~/.egc, and the remote itself.
+      const before = fingerprint(path.join(HOME, '.egc'), REMOTE);
+      try {
+        const run = teamCli(['init', '--backend', 'git', '--remote', REMOTE, '--key'], 'not-a-key\n');
+        assert.strictEqual(run.status, 1, `${run.stdout}\n${run.stderr}`);
+        assert.ok(run.stderr.includes('the key typed is not 64 hexadecimal characters'), run.stderr);
+        assert.strictEqual(fs.readFileSync(configPath, 'utf8'), saved, 'the configuration this machine had is untouched');
+        assert.strictEqual(fingerprint(path.join(HOME, '.egc'), REMOTE), before, 'nothing under ~/.egc, in the checkout or on the remote changed');
+      } finally {
+        fs.writeFileSync(configPath, saved);
+      }
+    });
+
+    run('team init with --key alone and no --remote reports the missing option before asking for the key', () => {
+      const run = teamCli(['init', '--backend', 'git', '--key'], '');
+      assert.strictEqual(run.status, 1, `${run.stdout}\n${run.stderr}`);
+      assert.ok(run.stderr.includes('--remote is required'), run.stderr);
+      assert.ok(!run.stderr.includes('Team key ('), `no prompt for the key:\n${run.stderr}`);
     });
 
     run('team sync against a remote that cannot be read exits 1 with the reason, never a quiet success', () => {

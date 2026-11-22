@@ -73,7 +73,7 @@ function showHelp() {
 EGC Team Memory: Sync state across teammates
 
 Usage:
-  egc team init --backend <backend> --remote <url> [--branch <branch>] [--key <hex>] [--no-autosync]
+  egc team init --backend <backend> --remote <url> [--branch <branch>] [--key [<hex>]] [--no-autosync]
   egc team invite [--port <n>] [--host <address>] [--no-announce]
   egc team join [<host:port>]
   egc team sync
@@ -97,13 +97,16 @@ Commands:
 Options:
   --backend   Sync backend type (default: git)
   --remote    Remote URL for the sync storage
-  --key       Team key (64 hex) shared by the member who initialized the team; omit to create a new team
+  --key       Team key (64 hex) shared by the member who initialized the team; alone, it asks for the
+              key without showing it (nothing in the process list or the shell history); omit it to
+              create a new team
   --branch    Git branch to use (default: main)
   --no-autosync  Leave the sync around the session off at init (it is on otherwise)
 
 Examples:
   egc team init --backend git --remote git@github.com:org/egc-memory
   egc team init --backend git --remote git@github.com:org/egc-memory --branch team
+  egc team init --backend git --remote git@github.com:org/egc-memory --key   # asks for the key, not shown
   egc team init --backend git --remote git@github.com:org/egc-memory --key <hex> --no-autosync
   egc team invite                      # on a machine of the team
   egc team join                        # on the new machine, same network
@@ -133,23 +136,37 @@ function optionValue(args, name, fallback) {
   return index === -1 ? fallback : args[index + 1];
 }
 
+// The key of the team for an init: given on the command line; typed without
+// echo when `--key` comes alone, so it reaches neither the process list nor
+// the shell history; or made here for a new team, so the config is complete
+// even when the memory server cannot be reached right now. A value that is
+// not a key ends the command.
+async function teamKeyForInit(args) {
+  const keyIndex = args.indexOf('--key');
+  if (keyIndex === -1) return { teamKey: crypto.randomBytes(32).toString('hex'), provided: false };
+  const given = args[keyIndex + 1];
+  const asked = given === undefined || given.startsWith('--');
+  const teamKey = asked ? (await readHidden('Team key (64 hexadecimal characters, not shown): ')).trim() : given;
+  if (!TEAM_KEY_RE.test(teamKey)) {
+    console.error(asked
+      ? 'Error: the key typed is not 64 hexadecimal characters (the key shared by the member who initialized the team)'
+      : 'Error: --key must be followed by 64 hexadecimal characters (the key shared by the member who initialized the team), or given alone to type the key without showing it');
+    process.exit(1);
+  }
+  return { teamKey, provided: true };
+}
+
 async function handleInit(args) {
   const backend = optionValue(args, '--backend', 'git');
   const remote = optionValue(args, '--remote', null);
   const branch = optionValue(args, '--branch', 'main');
-  const keyIndex = args.indexOf('--key');
-  const provided = keyIndex === -1 ? undefined : args[keyIndex + 1];
-  if (keyIndex !== -1 && (provided === undefined || provided.startsWith('--') || !/^[0-9a-f]{64}$/i.test(provided))) {
-    console.error('Error: --key must be followed by 64 hexadecimal characters (the key shared by the member who initialized the team)');
-    process.exit(1);
-  }
-  // The first member's key is made here, so the config is complete even
-  // when the memory server cannot be reached right now.
-  const teamKey = provided ?? crypto.randomBytes(32).toString('hex');
+  // The remote is checked before any prompt: a missing option is told at
+  // once, not after the person typed a key.
   if (!remote) {
     console.error('Error: --remote is required for team init');
     process.exit(1);
   }
+  const { teamKey, provided } = await teamKeyForInit(args);
 
   // On from init: the sync around the session is what a team of machines is
   // for; --no-autosync leaves it off on a machine that syncs by hand.
@@ -168,7 +185,7 @@ async function handleInit(args) {
   Branch:  ${branch}
   Autosync: ${autosync ? 'on' : 'off'}
   Config:  ${TEAM_CONFIG_PATH}`);
-    if (provided === undefined) {
+    if (!provided) {
       console.log(`Team key (share it out of band; teammates join with --key):\n  ${teamKey}`);
     }
   };
@@ -295,6 +312,57 @@ To join again: egc team init --backend ${config.backend ?? 'git'} --remote ${rem
 }
 
 const TEAM_KEY_RE = /^[0-9a-f]{64}$/i;
+
+// The team key typed without echo: it reaches neither the process list nor
+// the shell history. A terminal is read key by key in raw mode; a piped
+// stdin gives its first line.
+function readHidden(prompt) {
+  const input = process.stdin;
+  process.stderr.write(prompt);
+  return new Promise((resolve, reject) => {
+    let typed = '';
+    // The terminal is put back (echo on) whichever way the read ends: a
+    // line, the end of the input, or an error of the input.
+    const restore = () => {
+      input.removeListener('data', onData);
+      input.removeListener('end', onEnd);
+      input.removeListener('error', onError);
+      if (input.isTTY) input.setRawMode(false);
+      input.pause();
+      if (typeof input.unref === 'function') input.unref();
+      process.stderr.write('\n');
+    };
+    const finish = value => {
+      restore();
+      resolve(value);
+    };
+    const onError = error => {
+      restore();
+      reject(error);
+    };
+    const onEnd = () => finish(typed);
+    const onData = chunk => {
+      for (const char of chunk) {
+        if (char === '\u0003') {
+          finish('');
+          process.exit(130);
+        }
+        if (char === '\r' || char === '\n') {
+          finish(typed);
+          return;
+        }
+        if (char === '\u007f' || char === '\b') typed = typed.slice(0, -1);
+        else typed += char;
+      }
+    };
+    input.setEncoding('utf8');
+    if (input.isTTY) input.setRawMode(true);
+    input.on('data', onData);
+    input.on('end', onEnd);
+    input.on('error', onError);
+    input.resume();
+  });
+}
 
 // The person, asked on this screen whether the other one shows the same code.
 function askSameCode(pairing) {
