@@ -127,7 +127,9 @@ test('a tool that fails is reported with its own words, and a platform without a
     /systemctl --user failed \(1\): Failed to connect to bus/
   );
   assert.throws(() => service.installService({ platform: 'freebsd', home, run: tools.run }), /no service for freebsd: run egc mesh serve in a terminal/);
-  assert.deepStrictEqual(service.serviceStatus({ platform: 'freebsd', home, run: tools.run }), { installed: false, active: false, path: null, problem: null });
+  const elsewhere = service.serviceStatus({ platform: 'freebsd', home, run: tools.run });
+  assert.deepStrictEqual(elsewhere, { installed: false, active: false, path: null, problem: null });
+  assert.match(service.describeService(elsewhere, 'freebsd'), /no service on freebsd .*run egc mesh serve in a terminal/, 'the status does not promise an install that would be refused');
 });
 
 test('the flags of serve are checked before anything is written', () => {

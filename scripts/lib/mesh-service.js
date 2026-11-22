@@ -297,7 +297,10 @@ function serviceKind(platform) {
   return 'scheduled task';
 }
 
+const SERVICE_PLATFORMS = new Set(['linux', 'darwin', 'win32']);
+
 function describeService(status, platform = process.platform) {
+  if (!SERVICE_PLATFORMS.has(platform)) return `no service on ${platform} (run egc mesh serve in a terminal, or under the supervisor of this system)`;
   if (status.problem) return `${status.installed ? 'installed, ' : ''}state could not be read (${status.problem})`;
   if (!status.installed) return 'not installed (egc mesh serve --install runs the central at every login)';
   const kind = serviceKind(platform);
