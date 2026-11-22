@@ -363,7 +363,7 @@ async function handleJoin(args) {
   // A configuration that is there but does not read as a team is not
   // written over: it may be damaged team data the person wants back.
   if (fs.existsSync(TEAM_CONFIG_PATH)) {
-    console.error(`This machine has a team configuration that cannot be read as a team (${TEAM_CONFIG_PATH}): look at it, or run \`egc team leave\` to set it aside, before joining.`);
+    console.error(`This machine has a team configuration that cannot be read as a team (${TEAM_CONFIG_PATH}): look at it and repair it, or move the file aside yourself, before joining. Nothing here writes over it.`);
     process.exit(1);
   }
   const address = args[1] && !args[1].startsWith('--') ? args[1] : undefined;
