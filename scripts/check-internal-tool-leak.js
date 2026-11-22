@@ -37,9 +37,10 @@ function git(args, options) {
   return execFileSync(GIT_BIN, args, { encoding: 'utf8', maxBuffer: 1024 * 1024 * 64, ...options });
 }
 
+// A term counts as a whole word: a technical word that merely begins with
+// one of them (the multicast of mDNS, for one) is not a leak.
 function findHits(content) {
-  const lower = content.toLowerCase();
-  return DENYLIST.filter(term => lower.includes(term));
+  return DENYLIST.filter(term => new RegExp(`(?<![a-z0-9])${term}(?![a-z0-9])`, 'i').test(content));
 }
 
 function checkStaged() {
