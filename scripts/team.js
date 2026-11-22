@@ -300,13 +300,27 @@ const TEAM_KEY_RE = /^[0-9a-f]{64}$/i;
 function askSameCode(pairing) {
   return code => new Promise(resolve => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    rl.question(`\nCode: ${pairing.formatCode(code)}\nThe same six digits on the other screen? [y/N] `, answer => {
+    let answered = false;
+    const settle = yes => {
+      if (answered) return;
+      answered = true;
       rl.close();
       // A piped stdin would keep the process alive after the answer.
       if (typeof process.stdin.unref === 'function') process.stdin.unref();
-      resolve(/^y(?:es)?$/i.test(answer.trim()));
-    });
+      resolve(yes);
+    };
+    // The input ending before an answer (a closed pipe, Ctrl-D) is a no:
+    // nothing waits on the network budget for a question nobody will answer.
+    rl.on('close', () => settle(false));
+    rl.question(`\nCode: ${pairing.formatCode(code)}\nThe same six digits on the other screen? [y/N] `, answer => settle(/^y(?:es)?$/i.test(answer.trim())));
   });
+}
+
+// Whether the configuration is a whole team to hand over: the sync settings
+// as strings and a key of the right shape. A damaged one is refused before
+// the invitation, not by the other machine after the codes were compared.
+function isTransferableTeam(team) {
+  return Boolean(team) && typeof team.backend === 'string' && typeof team.remote === 'string' && typeof team.branch === 'string' && TEAM_KEY_RE.test(team.teamKey ?? '');
 }
 
 function loadPairing() {
@@ -323,6 +337,10 @@ async function handleInvite(args) {
   const team = readTeamConfig();
   if (!team || !TEAM_KEY_RE.test(team.teamKey ?? '')) {
     console.error('No team on this machine: run `egc team init` first, or join the team of your other machine with `egc team join`.');
+    process.exit(1);
+  }
+  if (!isTransferableTeam(team)) {
+    console.error(`The team configuration of this machine (${TEAM_CONFIG_PATH}) is missing its backend, remote or branch, so it cannot be handed over: run \`egc team init\` again with the same key, then invite.`);
     process.exit(1);
   }
   const port = Number(optionValue(args, '--port', '0'));

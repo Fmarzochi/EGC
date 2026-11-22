@@ -43,9 +43,13 @@ export function normalizeCentralAddress(value: string): string | null {
 }
 
 export function readMeshConfig(home: string = resolveHome()): MeshConfig | null {
+  const file = meshConfigPath(home);
   let parsed: unknown;
   try {
-    parsed = JSON.parse(fs.readFileSync(meshConfigPath(home), 'utf8'));
+    // Only a regular file is read: a link or a pipe in its place is not a
+    // configuration, and a read of it would follow or block.
+    if (!fs.lstatSync(file).isFile()) return null;
+    parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
   } catch {
     return null;
   }

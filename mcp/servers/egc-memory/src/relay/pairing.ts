@@ -262,7 +262,10 @@ export function lanAddresses(): string[] {
   const found: string[] = [];
   for (const addresses of Object.values(os.networkInterfaces())) {
     for (const address of addresses ?? []) {
-      if (!address.internal && address.family === 'IPv4') found.push(address.address);
+      if (address.internal) continue;
+      // IPv4 as it is; IPv6 only when routable (a link-local address needs a
+      // zone the other machine cannot type).
+      if (address.family === 'IPv4' || (address.family === 'IPv6' && !address.address.toLowerCase().startsWith('fe80'))) found.push(address.address);
     }
   }
   return found;
@@ -396,6 +399,10 @@ export async function discoverInvitations(timeoutMs: number = PAIR_DISCOVERY_MS)
   const bonjour = new Bonjour({}, () => undefined);
   const found = new Map<string, FoundInvitation>();
   const browser = bonjour.find({ type: PAIR_SERVICE_TYPE, protocol: 'tcp' }, (service: Service) => {
+    // Only an invitation of this protocol version: a stale announcement of
+    // another version is not an invitation this machine can take.
+    const version = (service.txt as Record<string, unknown> | undefined)?.v;
+    if (String(version) !== String(PAIR_PROTOCOL_VERSION)) return;
     const host = pickAddress(service);
     if (!host || !Number.isInteger(service.port) || service.port < 1) return;
     found.set(`${host}:${service.port}`, { name: service.name, address: `${host}:${service.port}` });
