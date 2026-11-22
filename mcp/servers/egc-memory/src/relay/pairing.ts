@@ -35,6 +35,9 @@ const MAX_SERVICE_NAME = 63;
 const MAX_QUEUED_FRAMES = 8;
 // How long a connection has to say hello before the invitation is free again.
 const HELLO_TIMEOUT_MS = 10_000;
+// Connections kept open while they have not said hello yet; one more is
+// turned away at once, so a peer holding sockets cannot fill the listener.
+const MAX_PENDING_WIRES = 8;
 
 export interface PairingKeys {
   publicKey: Buffer;
@@ -288,8 +291,16 @@ export async function invite(options: InviteOptions): Promise<PairOutcome> {
   options.onReady?.({ port, addresses: shown, announced: announcement !== null });
 
   const wires = new Set<Wire>();
+  let closing = false;
   const outcome = await new Promise<PairOutcome>(resolve => {
     let taken = false;
+    // Why a new connection is turned away at once: the invitation is taken
+    // or closing, or as many connections as allowed still have to say hello.
+    const turnAway = (): string | null => {
+      if (closing || taken) return 'another machine is pairing';
+      if (wires.size >= MAX_PENDING_WIRES) return 'the invitation is busy';
+      return null;
+    };
     const deadline = setTimeout(() => resolve(refused('no machine joined in time')), timeoutMs);
     const failed = (error: unknown): void => resolve(refused(error instanceof Error ? error.message : String(error)));
     // The invitation goes to the first connection that says hello in time;
@@ -306,8 +317,9 @@ export async function invite(options: InviteOptions): Promise<PairOutcome> {
       resolve(await hostExchange(wire, theirs, keys, options));
     };
     server.on('connection', socket => {
-      if (taken) {
-        socket.end(`${JSON.stringify({ t: 'abort', reason: 'another machine is pairing' })}\n`);
+      const reason = turnAway();
+      if (reason) {
+        socket.end(`${JSON.stringify({ t: 'abort', reason })}\n`);
         return;
       }
       const wire = new Wire(socket, timeoutMs);
@@ -316,9 +328,14 @@ export async function invite(options: InviteOptions): Promise<PairOutcome> {
       admit(wire).catch(failed);
     });
   });
+  // No connection is let in from here on: the listener closes before the
+  // announcement goes, and the wires still open are ended, so the close
+  // does not wait on a late connection.
+  closing = true;
+  const closed = new Promise<void>(resolve => server.close(() => resolve()));
   for (const wire of wires) wire.end();
   await announcement?.stop();
-  await new Promise<void>(resolve => server.close(() => resolve()));
+  await closed;
   return outcome;
 }
 
@@ -430,12 +447,16 @@ function cleanTeam(value: unknown): { team: TeamConfig; central: string | null }
 // was, so a failure never leaves half a join. A team without a central clears
 // the central a previous team left, so the bridge does not go back to it.
 function writeTeam(team: TeamConfig, central: string | null): void {
-  let previous: Buffer | null;
+  // Only a regular file is read and kept for the rollback: a pipe or a
+  // link in its place is refused before anything is read or written.
+  let stat: fs.Stats | null;
   try {
-    previous = fs.readFileSync(TEAM_CONFIG_PATH);
+    stat = fs.lstatSync(TEAM_CONFIG_PATH);
   } catch {
-    previous = null;
+    stat = null;
   }
+  if (stat && !stat.isFile()) throw new Error(`${TEAM_CONFIG_PATH} is not a regular file`);
+  const previous = stat ? fs.readFileSync(TEAM_CONFIG_PATH) : null;
   writeTeamConfig(team);
   try {
     if (central) writeMeshConfig(central);

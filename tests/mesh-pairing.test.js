@@ -141,6 +141,25 @@ async function runTests() {
       assert.strictEqual(pairing.formatCode(fromA), `${fromA.slice(0, 3)} ${fromA.slice(3)}`);
     });
 
+    await test('an invitation holds a bounded number of silent connections and turns the one past the cap away at once', async () => {
+      const invitation = inviteOn({ confirm: async () => true, timeoutMs: 1500 });
+      await invitation.ready;
+      const silent = [];
+      for (let count = 0; count < 8; count += 1) silent.push(net.connect(invitation.port(), '127.0.0.1'));
+      await new Promise(resolve => setTimeout(resolve, 300));
+      const extra = net.connect(invitation.port(), '127.0.0.1');
+      const told = await new Promise(resolve => {
+        let text = '';
+        extra.on('data', chunk => { text += chunk; });
+        extra.on('close', () => resolve(text));
+        extra.on('error', () => resolve(text));
+      });
+      assert.match(told, /the invitation is busy/);
+      for (const socket of silent) socket.destroy();
+      const outcome = await invitation.outcome;
+      assert.strictEqual(outcome.paired, false, 'nobody said hello, so nothing was paired');
+    });
+
     await test('both screens show the same code, both say yes, and the team with its central lands on the new machine, sealed on the way', async () => {
       const person = personAtBothScreens();
       const written = [];
