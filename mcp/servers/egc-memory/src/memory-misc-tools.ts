@@ -10,6 +10,7 @@ import { detectPatternsFromEvents, patternToStoreEntry } from './patterns.js';
 import { llmCompress, loadRawObservations, pairCompressedWithId, replaceObservation } from './compress.js';
 import { sanitize, sanitizeStrings } from './sanitize.js';
 import { teamInit, teamSync, teamStatus } from './sync/TeamSync.js';
+import { machineLabel, newRecordId, projectKeyOf } from './sync/records.js';
 import { resolveStateStoreDbPath } from './state-store-path.js';
 import { setWorkingMemory, getWorkingMemory, listWorkingMemory } from './working-memory';
 import { BUS_SESSION_ID } from './memory-session-bus';
@@ -84,18 +85,18 @@ async function handleSearchHistory(db: Database, query: string, limit: number, m
 
 // Same row shape as searchDecisions (id, content, context, date, score) so
 // callers cannot tell the engines apart; every match scores 1.
-async function searchDecisionsBySubstring(db: Database, query: string, limit: number): Promise<Array<{ id: number; content: string; context: string; date: string; score: number }>> {
+async function searchDecisionsBySubstring(db: Database, query: string, limit: number): Promise<Array<{ id: number; content: string; context: string; date: string; score: number; machine: string | null }>> {
   const terms = query.split(/\s+/).map(t => t.trim().toLowerCase()).filter(Boolean);
   if (terms.length === 0) return [];
   // The term is data, never a pattern: escape LIKE's wildcards.
   const escaped = terms.map(t => t.replace(/[\\%_]/g, m => `\\${m}`));
   const where = escaped.map(() => String.raw`(LOWER(context) LIKE ? ESCAPE '\' OR LOWER(decision) LIKE ? ESCAPE '\')`).join(' AND ');
   const params = escaped.flatMap(t => [`%${t}%`, `%${t}%`]);
-  const rows: Array<{ id: number; context: string; decision: string; timestamp: string }> = await db.all(
-    `SELECT id, context, decision, timestamp FROM decisions WHERE ${where} ORDER BY timestamp DESC LIMIT ?`,
+  const rows: Array<{ id: number; context: string; decision: string; timestamp: string; machine_label: string | null }> = await db.all(
+    `SELECT id, context, decision, timestamp, machine_label FROM decisions WHERE ${where} ORDER BY timestamp DESC LIMIT ?`,
     [...params, limit]
   );
-  return rows.map(r => ({ id: r.id, content: r.decision, context: r.context, date: r.timestamp, score: 1 }));
+  return rows.map(r => ({ id: r.id, content: r.decision, context: r.context, date: r.timestamp, score: 1, machine: r.machine_label ?? null }));
 }
 
 export async function handleStoreDecision(db: Database, toolArgs: unknown) {
@@ -107,8 +108,12 @@ export async function handleStoreDecision(db: Database, toolArgs: unknown) {
   }
 
   const decisionProjPath = resolveProjectPath();
+  // A stable id, the key of the project and the name of this machine: what
+  // the record needs to travel with the team sync and merge once there.
+  const recordId = newRecordId();
+  const machine = machineLabel();
   await writeArbitrator.enqueue(async () => {
-    await db.run('INSERT INTO decisions (context, decision, project_path) VALUES (?, ?, ?)', [cleaned.sanitized.context, cleaned.sanitized.decision, decisionProjPath]);
+    await db.run('INSERT INTO decisions (record_id, context, decision, project_path, project_key, machine_label) VALUES (?, ?, ?, ?, ?, ?)', [recordId, cleaned.sanitized.context, cleaned.sanitized.decision, decisionProjPath, projectKeyOf(decisionProjPath), machine]);
   });
   await notifyMemoryChanged(db, BUS_SESSION_ID, { kind: 'decision', projectPath: decisionProjPath ?? null });
 

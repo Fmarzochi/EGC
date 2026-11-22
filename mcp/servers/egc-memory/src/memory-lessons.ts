@@ -7,6 +7,7 @@ import { writeArbitrator, isLessonsSearchIndexReady } from './memory-db';
 import { resolveProjectPath } from './memory-project-path';
 import { searchLessons } from './search.js';
 import { sanitize, sanitizeStrings } from './sanitize.js';
+import { machineLabel, projectKeyOf } from './sync/records.js';
 import { BUS_SESSION_ID } from './memory-session-bus';
 import { notifyMemoryChanged } from './memory-notify';
 
@@ -28,6 +29,7 @@ interface LessonRow {
   tags: string | null;
   archived: number;
   author?: string | null;
+  machine_label?: string | null;
 }
 
 function mapLessonRow(row: LessonRow) {
@@ -42,6 +44,7 @@ function mapLessonRow(row: LessonRow) {
     tags: row.tags ?? null,
     archived: row.archived === 1,
     author: row.author ?? null,
+    machine: row.machine_label ?? null,
   };
 }
 
@@ -138,9 +141,9 @@ export async function handleLessonSave(db: Database, args: unknown) {
   const projPath = resolveProjectPath();
   await writeArbitrator.enqueue(async () => {
     await db.run(
-      `INSERT INTO lessons (id, content, context, confidence, last_reinforced, last_recalled, created_at, tags, archived, project_path, author)
-       VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, 0, ?, ?)`,
-      [id, content, context, initial_confidence, now, normalizedTags, projPath, authorName]
+      `INSERT INTO lessons (id, content, context, confidence, last_reinforced, last_recalled, created_at, tags, archived, project_path, project_key, author, machine_label)
+       VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, 0, ?, ?, ?, ?)`,
+      [id, content, context, initial_confidence, now, normalizedTags, projPath, projectKeyOf(projPath), authorName, machineLabel()]
     );
   });
   await notifyMemoryChanged(db, BUS_SESSION_ID, { kind: 'lesson', projectPath: projPath ?? null });
@@ -189,7 +192,8 @@ export async function handleLessonRecall(db: Database, args: unknown) {
     matched = results.map(r => mapLessonRow({
       id: r.id, content: r.content, context: r.context, confidence: r.confidence,
       tags: r.tags ?? null, author: r.author ?? null, archived: 0, created_at: r.created_at,
-      last_reinforced: r.last_reinforced ?? null, last_recalled: r.last_recalled ?? null
+      last_reinforced: r.last_reinforced ?? null, last_recalled: r.last_recalled ?? null,
+      machine_label: r.machine_label ?? null
     } as LessonRow)).map(presentLesson);
   } else {
     const lowerQuery = query.toLowerCase();

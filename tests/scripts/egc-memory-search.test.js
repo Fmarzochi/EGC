@@ -49,7 +49,7 @@ async function test(name, fn) {
 async function openMemoryDb() {
   const db = await open({ filename: ':memory:', driver: sqlite3.Database });
   await db.exec(
-    'CREATE TABLE IF NOT EXISTS decisions (id INTEGER PRIMARY KEY AUTOINCREMENT, context TEXT, decision TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)'
+    'CREATE TABLE IF NOT EXISTS decisions (id INTEGER PRIMARY KEY AUTOINCREMENT, context TEXT, decision TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP, machine_label TEXT)'
   );
   return db;
 }

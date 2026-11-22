@@ -21,6 +21,10 @@ export interface SyncResult {
   // What the sync fixed on the way and the person should know, without
   // the sync having failed: a damaged team marker written again.
   warnings: string[];
+  // The records (lessons, decisions, working memory) merged from the other
+  // machines and staged from this one, when the sync ran with the store.
+  recordsMerged?: number;
+  recordsStaged?: number;
 }
 
 // readRemote false skips every read of the remote: the backend is set up

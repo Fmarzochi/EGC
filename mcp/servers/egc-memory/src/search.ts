@@ -6,6 +6,7 @@ export interface RankedDecision {
   context: string;
   date: string;
   score: number;
+  machine: string | null;
 }
 
 interface RawSearchRow {
@@ -13,6 +14,7 @@ interface RawSearchRow {
   content: string;
   context: string;
   date: string;
+  machine: string | null;
   rawScore: number;
 }
 
@@ -67,7 +69,8 @@ export function rankResults(rows: RawSearchRow[]): RankedDecision[] {
     content: row.content,
     context: row.context,
     date: row.date,
-    score: best > 0 ? Math.round((-row.rawScore / best) * 100) / 100 : 0
+    score: best > 0 ? Math.round((-row.rawScore / best) * 100) / 100 : 0,
+    machine: row.machine ?? null
   }));
 }
 
@@ -81,6 +84,7 @@ export interface RankedLesson {
   created_at: string;
   last_reinforced: string | null;
   last_recalled: string | null;
+  machine_label: string | null;
   score: number;
 }
 
@@ -94,6 +98,7 @@ interface RawLessonRow {
   created_at: string;
   last_reinforced: string | null;
   last_recalled: string | null;
+  machine_label: string | null;
   rawScore: number;
 }
 
@@ -138,7 +143,7 @@ export async function searchLessons(
 
   const rows: RawLessonRow[] = await db.all(
     `SELECT l.id, l.content, l.context, l.confidence, l.tags, l.author,
-            l.created_at, l.last_reinforced, l.last_recalled,
+            l.created_at, l.last_reinforced, l.last_recalled, l.machine_label,
             bm25(lessons_fts) AS rawScore
      FROM lessons_fts
      JOIN lessons l ON l.rowid = lessons_fts.rowid
@@ -162,6 +167,7 @@ export async function searchLessons(
     created_at: r.created_at,
     last_reinforced: r.last_reinforced ?? null,
     last_recalled: r.last_recalled ?? null,
+    machine_label: r.machine_label ?? null,
     score: best > 0 ? Math.round((-r.rawScore / best) * 100) / 100 : 0
   }));
 }
@@ -182,6 +188,7 @@ export async function searchDecisions(
             d.decision AS content,
             d.context AS context,
             d.timestamp AS date,
+            d.machine_label AS machine,
             bm25(decisions_fts) AS rawScore
      FROM decisions_fts
      JOIN decisions d ON d.id = decisions_fts.rowid
