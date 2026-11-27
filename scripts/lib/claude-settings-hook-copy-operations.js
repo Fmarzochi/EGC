@@ -21,6 +21,8 @@ const {
   resolveGrokGuardianHookFilePath,
 } = require('./grok-hooks');
 const {
+  SESSION_START_EVENT,
+  STOP_EVENT,
   USER_PROMPT_SUBMIT_EVENT,
   PRE_TOOL_USE_EVENT,
   HOOK_OPERATION_KIND,
@@ -391,7 +393,104 @@ function createAdapterStdinJsonCopyOperation(createRemappedOperation, targetRoot
   );
 }
 
+// The session hooks of the hosts that read the Claude Code hook format
+// (Copilot, Qwen Code, CodeBuddy, Junie, Auggie, Goose, Droid): SessionStart
+// restores the project memory and pulls the Team Brain when the team asks
+// for it, through the wrapper of the host; Stop pushes what changed, through
+// the shared team-sync-stop.js. What the two load travels with its paths
+// kept, so the requires resolve from <root>/scripts/hooks: the shared
+// session adapter and what restores, decrypts and propagates the state (the
+// list claude-home.js flattens into egc/lib), and the Team Brain sync.
+const HOST_SESSION_HOOK_MODULE_ID = 'egc-host-session-hook';
+const TEAM_SYNC_STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/team-sync-stop.js';
+const SESSION_HOOK_LIB_SOURCES = [
+  'scripts/lib/host-session-start.js',
+  'scripts/lib/session-start-adapter.js',
+  'scripts/lib/dashboard-token.js',
+  'scripts/lib/crusher/session-marker.js',
+  'scripts/lib/session-context-loader.js',
+  'scripts/lib/branch-state.js',
+  'scripts/lib/global-state.js',
+  'scripts/lib/project-detect.js',
+  'scripts/lib/propagate-state.js',
+  'scripts/lib/state-crypto.js',
+  'scripts/lib/learning-store.js',
+  'scripts/lib/team-config.js',
+  'scripts/lib/team-autosync.js',
+  'scripts/lib/team-mcp-client.js',
+  'scripts/lib/resolve-egc-root.js',
+  // propagate-state.js's commit-privacy guard shells out to this script; with
+  // the scripts/ prefix kept it lands where the runtime looks for it.
+  'scripts/check-state-leak.js',
+];
+
+function resolveTeamSyncStopHookScriptDestination(targetRoot) {
+  return path.join(targetRoot, ...TEAM_SYNC_STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH.split('/'));
+}
+
+// The copies of the session hooks and what they load, under targetRoot; a
+// destination the target already plans (the gates share several of these
+// files) is left to that plan, so no file is planned twice.
+function createHostSessionHookCopyOperations(createRemappedOperation, targetRoot, sessionStartSourceRelativePath, plannedDestinations = new Set()) {
+  return [sessionStartSourceRelativePath, TEAM_SYNC_STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH, ...SESSION_HOOK_LIB_SOURCES]
+    .map(sourceRelativePath => createRemappedOperation(
+      HOST_SESSION_HOOK_MODULE_ID,
+      sourceRelativePath,
+      path.join(targetRoot, ...sourceRelativePath.split('/')),
+      { strategy: 'preserve-relative-path' }
+    ))
+    .filter(operation => !plannedDestinations.has(operation.destinationPath));
+}
+
+function createSessionStartHookMergeOperationForDestination(destinationPath, hookScriptPath, sourceRelativePath) {
+  return {
+    kind: HOOK_OPERATION_KIND,
+    moduleId: HOST_SESSION_HOOK_MODULE_ID,
+    sourceRelativePath,
+    destinationPath,
+    strategy: HOOK_OPERATION_KIND,
+    ownership: 'managed',
+    scaffoldOnly: false,
+    hookEvent: SESSION_START_EVENT,
+    hookScriptPath,
+  };
+}
+
+function createStopHookMergeOperationForDestination(destinationPath, hookScriptPath) {
+  return {
+    kind: HOOK_OPERATION_KIND,
+    moduleId: HOST_SESSION_HOOK_MODULE_ID,
+    sourceRelativePath: TEAM_SYNC_STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    destinationPath,
+    strategy: HOOK_OPERATION_KIND,
+    ownership: 'managed',
+    scaffoldOnly: false,
+    hookEvent: STOP_EVENT,
+    hookScriptPath,
+  };
+}
+
+// Everything a host needs for its session hooks: the copies under targetRoot
+// and the two entries in its hooks file (settings.json, config.json or a
+// plugin's hooks.json, whatever the host reads), in the Claude Code format.
+function createHostSessionHookOperations({ createRemappedOperation, targetRoot, hooksFilePath, sessionStartSourceRelativePath, plannedDestinations }) {
+  const sessionStartScript = path.join(targetRoot, ...sessionStartSourceRelativePath.split('/'));
+  return [
+    ...createHostSessionHookCopyOperations(createRemappedOperation, targetRoot, sessionStartSourceRelativePath, plannedDestinations),
+    createSessionStartHookMergeOperationForDestination(hooksFilePath, sessionStartScript, sessionStartSourceRelativePath),
+    createStopHookMergeOperationForDestination(hooksFilePath, resolveTeamSyncStopHookScriptDestination(targetRoot)),
+  ];
+}
+
 module.exports = {
+  HOST_SESSION_HOOK_MODULE_ID,
+  SESSION_HOOK_LIB_SOURCES,
+  TEAM_SYNC_STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+  createHostSessionHookCopyOperations,
+  createHostSessionHookOperations,
+  createSessionStartHookMergeOperationForDestination,
+  createStopHookMergeOperationForDestination,
+  resolveTeamSyncStopHookScriptDestination,
   CRUSHER_HOOK_LIB_SOURCES,
   BASH_GUARDIAN_HOOK_LIB_SOURCES,
   createGateGuardHookMergeOperationForDestination,

@@ -6,8 +6,10 @@ const {
 const {
   createBashGuardianScriptCopyOperations,
   createCrusherScriptCopyOperations,
+  createHostSessionHookOperations,
   createPreToolUseBashGuardianHookMergeOperation,
   createPreToolUseCrusherHookMergeOperation,
+  resolveSettingsPath,
 } = require('../claude-settings-hooks');
 
 // Qwen Code discovers project skills from .qwen/skills/<skill-name>/SKILL.md.
@@ -46,6 +48,26 @@ function createQwenCrusherOperations(adapter, targetRoot) {
   return [...copyOperations, createPreToolUseCrusherHookMergeOperation(targetRoot, 'run_shell_command')];
 }
 
+// The session hooks, in the same settings.json and the same format
+// ([Qwen Code hooks](https://qwenlm.github.io/qwen-code-docs/en/users/features/hooks/),
+// read on 2026-11-27): SessionStart gets session_id and cwd and reads
+// hookSpecificOutput.additionalContext back, so the project memory reaches
+// the session and the Team Brain is pulled when the team asks for it; Stop
+// pushes what changed.
+const QWEN_SESSION_START_SOURCE_RELATIVE_PATH = 'scripts/hooks/qwen-session-start.js';
+
+function createQwenSessionOperations(adapter, targetRoot, plannedDestinations) {
+  return createHostSessionHookOperations({
+    createRemappedOperation: (moduleId, sourceRelativePath, destinationPath, options) => (
+      createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
+    ),
+    targetRoot,
+    hooksFilePath: resolveSettingsPath(targetRoot),
+    sessionStartSourceRelativePath: QWEN_SESSION_START_SOURCE_RELATIVE_PATH,
+    plannedDestinations,
+  });
+}
+
 module.exports = createInstallTargetAdapter({
   id: 'qwen-project',
   target: 'qwen',
@@ -56,10 +78,11 @@ module.exports = createInstallTargetAdapter({
   planOperations(input, adapter) {
     const planningInput = { repoRoot: input.repoRoot, projectRoot: input.projectRoot, homeDir: input.homeDir };
     const targetRoot = adapter.resolveRoot(planningInput);
-    return [
+    const planned = [
       ...createFlatSkillPlanOperations(input, adapter),
       ...createQwenGuardianOperations(adapter, targetRoot),
       ...createQwenCrusherOperations(adapter, targetRoot),
     ];
+    return [...planned, ...createQwenSessionOperations(adapter, targetRoot, new Set(planned.map(operation => operation.destinationPath)))];
   },
 });

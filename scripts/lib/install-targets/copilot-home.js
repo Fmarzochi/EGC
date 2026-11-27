@@ -33,30 +33,10 @@ const {
   resolveCopilotHooksFilePath,
 } = require('../copilot-settings-hooks');
 const { createCopilotHooksVersionOperation } = require('../copilot-hooks-version');
-
 // What the session hooks load, copied with their paths kept so the requires
-// resolve from ~/.github/scripts/hooks: the shared session adapter and what
-// restores, decrypts and propagates the state (the list claude-home.js
-// flattens into egc/lib), and the Team Brain sync around the session.
-const SESSION_HOOK_LIB_SOURCES = [
-  'scripts/lib/session-start-adapter.js',
-  'scripts/lib/dashboard-token.js',
-  'scripts/lib/crusher/session-marker.js',
-  'scripts/lib/session-context-loader.js',
-  'scripts/lib/branch-state.js',
-  'scripts/lib/global-state.js',
-  'scripts/lib/project-detect.js',
-  'scripts/lib/propagate-state.js',
-  'scripts/lib/state-crypto.js',
-  'scripts/lib/learning-store.js',
-  'scripts/lib/team-config.js',
-  'scripts/lib/team-autosync.js',
-  'scripts/lib/team-mcp-client.js',
-  'scripts/lib/resolve-egc-root.js',
-  // propagate-state.js's commit-privacy guard shells out to this script; with
-  // the scripts/ prefix kept it lands where the runtime looks for it.
-  'scripts/check-state-leak.js',
-];
+// resolve from ~/.github/scripts/hooks: the list every host with session
+// hooks shares (claude-settings-hook-copy-operations.js).
+const { SESSION_HOOK_LIB_SOURCES } = require('../claude-settings-hooks');
 
 const UTILS_SOURCE_RELATIVE_PATH = 'scripts/lib/utils.js';
 // utils.js is a thin re-export over these four sibling modules (#1712);

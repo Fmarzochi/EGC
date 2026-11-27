@@ -2916,6 +2916,76 @@ function runTests() {
     assert.strictEqual(hooksFileOperations.at(-1).hookEvent, 'copilot:hooks-version', 'the version of the Copilot hooks file is written after every entry');
   }));
 
+  tally(test('the hosts that read the Claude Code hook format register SessionStart and Stop beside their gates and scaffold the session runtime', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+    const projectRoot = '/Users/example/work/demo';
+    const cases = [
+      { target: 'qwen', hooksFile: path.join(projectRoot, '.qwen', 'settings.json'), root: path.join(projectRoot, '.qwen'), script: 'qwen-session-start.js' },
+      { target: 'codebuddy', hooksFile: path.join(projectRoot, '.codebuddy', 'settings.json'), root: path.join(projectRoot, '.codebuddy'), script: 'codebuddy-session-start.js' },
+      { target: 'junie', hooksFile: path.join(homeDir, '.junie', 'config.json'), root: path.join(homeDir, '.junie'), script: 'junie-session-start.js' },
+      { target: 'auggie', hooksFile: path.join(homeDir, '.augment', 'settings.json'), root: path.join(homeDir, '.augment'), script: 'auggie-session-start.js' },
+      { target: 'goose', hooksFile: path.join(homeDir, '.agents', 'plugins', 'egc-session', 'hooks', 'hooks.json'), root: path.join(homeDir, '.agents', 'plugins', 'egc-session'), script: 'goose-session-start.js' },
+      { target: 'droid', hooksFile: path.join(homeDir, '.factory', 'settings.json'), root: path.join(homeDir, '.factory'), script: 'droid-session-start.js' },
+    ];
+    for (const { target, hooksFile, root, script } of cases) {
+      const plan = planInstallTargetScaffold({ target, repoRoot, homeDir, projectRoot, modules: [] });
+      const sessionOperations = plan.operations.filter(operation => (
+        operation.kind === 'merge-claude-settings-hooks' && operation.destinationPath === hooksFile
+        && (operation.hookEvent === 'SessionStart' || operation.hookEvent === 'Stop')
+      ));
+      assert.deepStrictEqual(
+        sessionOperations.map(operation => [operation.hookEvent, operation.hookScriptPath]).sort(),
+        [['SessionStart', path.join(root, 'scripts', 'hooks', script)], ['Stop', path.join(root, 'scripts', 'hooks', 'team-sync-stop.js')]],
+        `${target}: SessionStart runs the wrapper of the host and Stop the shared push script, in ${hooksFile}`
+      );
+      for (const source of [`scripts/hooks/${script}`, 'scripts/hooks/team-sync-stop.js', 'scripts/lib/host-session-start.js', 'scripts/lib/session-start-adapter.js', 'scripts/lib/session-context-loader.js', 'scripts/lib/team-autosync.js', 'scripts/check-state-leak.js']) {
+        assert.ok(
+          plan.operations.some(operation => normalizedRelativePath(operation.sourceRelativePath) === source
+            && operation.destinationPath === path.join(root, ...source.split('/'))),
+          `${target}: ${source} is copied with its path kept, so the requires resolve`
+        );
+      }
+      const destinations = plan.operations.filter(operation => operation.kind !== 'merge-claude-settings-hooks').map(operation => operation.destinationPath);
+      assert.strictEqual(new Set(destinations).size, destinations.length, `${target}: no file is planned twice`);
+    }
+  }));
+
+  tally(test('the hosts that read the Claude Code hook format register SessionStart and Stop beside their gates and scaffold the session runtime', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+    const projectRoot = '/Users/example/work/demo';
+    const cases = [
+      { target: 'qwen', hooksFile: path.join(projectRoot, '.qwen', 'settings.json'), root: path.join(projectRoot, '.qwen'), script: 'qwen-session-start.js' },
+      { target: 'codebuddy', hooksFile: path.join(projectRoot, '.codebuddy', 'settings.json'), root: path.join(projectRoot, '.codebuddy'), script: 'codebuddy-session-start.js' },
+      { target: 'junie', hooksFile: path.join(homeDir, '.junie', 'config.json'), root: path.join(homeDir, '.junie'), script: 'junie-session-start.js' },
+      { target: 'auggie', hooksFile: path.join(homeDir, '.augment', 'settings.json'), root: path.join(homeDir, '.augment'), script: 'auggie-session-start.js' },
+      { target: 'goose', hooksFile: path.join(homeDir, '.agents', 'plugins', 'egc-session', 'hooks', 'hooks.json'), root: path.join(homeDir, '.agents', 'plugins', 'egc-session'), script: 'goose-session-start.js' },
+      { target: 'droid', hooksFile: path.join(homeDir, '.factory', 'settings.json'), root: path.join(homeDir, '.factory'), script: 'droid-session-start.js' },
+    ];
+    for (const { target, hooksFile, root, script } of cases) {
+      const plan = planInstallTargetScaffold({ target, repoRoot, homeDir, projectRoot, modules: [] });
+      const sessionOperations = plan.operations.filter(operation => (
+        operation.kind === 'merge-claude-settings-hooks' && operation.destinationPath === hooksFile
+        && (operation.hookEvent === 'SessionStart' || operation.hookEvent === 'Stop')
+      ));
+      assert.deepStrictEqual(
+        sessionOperations.map(operation => [operation.hookEvent, operation.hookScriptPath]).sort(),
+        [['SessionStart', path.join(root, 'scripts', 'hooks', script)], ['Stop', path.join(root, 'scripts', 'hooks', 'team-sync-stop.js')]],
+        `${target}: SessionStart runs the wrapper of the host and Stop the shared push script, in ${hooksFile}`
+      );
+      for (const source of [`scripts/hooks/${script}`, 'scripts/hooks/team-sync-stop.js', 'scripts/lib/host-session-start.js', 'scripts/lib/session-start-adapter.js', 'scripts/lib/session-context-loader.js', 'scripts/lib/team-autosync.js', 'scripts/check-state-leak.js']) {
+        assert.ok(
+          plan.operations.some(operation => normalizedRelativePath(operation.sourceRelativePath) === source
+            && operation.destinationPath === path.join(root, ...source.split('/'))),
+          `${target}: ${source} is copied with its path kept, so the requires resolve`
+        );
+      }
+      const destinations = plan.operations.filter(operation => operation.kind !== 'merge-claude-settings-hooks').map(operation => operation.destinationPath);
+      assert.strictEqual(new Set(destinations).size, destinations.length, `${target}: no file is planned twice`);
+    }
+  }));
+
   tally(test('COPILOT_HOME moves the whole Copilot root: the hooks file, the skills and the managed roots', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
@@ -3889,7 +3959,7 @@ function runTests() {
       modules: [],
     });
 
-    const mergeOperations = plan.operations.filter(operation => operation.destinationPath === configJsonPath);
+    const mergeOperations = plan.operations.filter(operation => operation.destinationPath === configJsonPath && operation.hookEvent === 'PreToolUse');
     assert.strictEqual(mergeOperations.length, 2, 'Guardian and Crusher should each plan exactly one merge into ~/.junie/config.json');
     assert.ok(
       mergeOperations.every(operation => operation.hookEvent === 'PreToolUse' && operation.hookMatcher === 'Bash'),
@@ -4127,8 +4197,12 @@ function runTests() {
       modules: [{ id: 'workflow', paths: ['skills/workflow/tdd-workflow'] }],
     });
 
+    // The session marker under scripts/lib/crusher travels with the session
+    // hooks; the Token Crusher itself is crusher-hook.js and its PreToolUse
+    // entry, and neither is planned for Goose.
     assert.ok(
-      !plan.operations.some(operation => operation.destinationPath && operation.destinationPath.includes('crusher')),
+      !plan.operations.some(operation => (operation.destinationPath && path.basename(operation.destinationPath) === 'crusher-hook.js')
+        || (operation.hookScriptPath && operation.hookScriptPath.endsWith('crusher-hook.js'))),
       'Goose adapter should not register any Crusher-related operation'
     );
   }));
@@ -4364,7 +4438,7 @@ function runTests() {
       modules: [],
     });
 
-    const mergeOperations = plan.operations.filter(operation => operation.destinationPath === settingsJsonPath);
+    const mergeOperations = plan.operations.filter(operation => operation.destinationPath === settingsJsonPath && operation.hookEvent === 'PreToolUse');
     assert.strictEqual(mergeOperations.length, 2, 'Guardian and Crusher should each plan exactly one merge into .qwen/settings.json');
     assert.ok(
       mergeOperations.every(operation => operation.hookEvent === 'PreToolUse' && operation.hookMatcher === 'run_shell_command'),
@@ -5993,6 +6067,8 @@ function runTests() {
       ['egc-bash-guardian-hook', 'PreToolUse', 'Execute'],
       ['claude-write-validator-hook', 'PreToolUse', 'Edit|Create|ApplyPatch'],
       ['egc-crusher-hook', 'PreToolUse', 'Execute'],
+      ['egc-host-session-hook', 'SessionStart', undefined],
+      ['egc-host-session-hook', 'Stop', undefined],
     ]);
   }));
 

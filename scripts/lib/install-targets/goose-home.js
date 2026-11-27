@@ -8,6 +8,7 @@ const {
   createAdapterStdinJsonCopyOperation,
   createBashGuardianHookMergeOperationForDestination,
   createBashGuardianScriptCopyOperations,
+  createHostSessionHookOperations,
 } = require('../claude-settings-hooks');
 
 // Goose already reads skills from ~/.agents/skills/<name>/ -- the same
@@ -57,6 +58,29 @@ function createGooseGuardianOperations(adapter, targetRoot) {
   ];
 }
 
+// The session hooks, in a plugin of their own (~/.agents/plugins/egc-session,
+// the layout Goose discovers, hooks/hooks.json in the Claude Code format;
+// [Goose hooks](https://goose-docs.ai/blog/2026/05/14/goose-hooks), read on
+// 2026-11-27): SessionStart gets session_id and working_dir and reads
+// additionalContext back, so the project memory reaches the session and the
+// Team Brain is pulled when the team asks for it; Stop pushes what changed.
+// The plugin is self-contained like the Guardian's: the wrapper, the shared
+// push script and what they load live under its root.
+const GOOSE_SESSION_START_SOURCE_RELATIVE_PATH = 'scripts/hooks/goose-session-start.js';
+
+function createGooseSessionOperations(adapter, targetRoot) {
+  const pluginRoot = path.join(targetRoot, 'plugins', 'egc-session');
+  return createHostSessionHookOperations({
+    createRemappedOperation: (moduleId, sourceRelativePath, destinationPath, options) => (
+      createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
+    ),
+    targetRoot: pluginRoot,
+    hooksFilePath: resolveGoosePluginHooksJsonPath(pluginRoot),
+    sessionStartSourceRelativePath: GOOSE_SESSION_START_SOURCE_RELATIVE_PATH,
+    plannedDestinations: new Set(),
+  });
+}
+
 module.exports = createInstallTargetAdapter({
   id: 'goose-home',
   target: 'goose',
@@ -70,6 +94,7 @@ module.exports = createInstallTargetAdapter({
     return [
       ...createFlatSkillPlanOperations(input, adapter),
       ...createGooseGuardianOperations(adapter, targetRoot),
+      ...createGooseSessionOperations(adapter, targetRoot),
     ];
   },
 });
