@@ -178,7 +178,15 @@ async function connectCentral(args) {
     process.exitCode = 2;
     return;
   }
-  const target = parsed.address ?? await discoveredCentral();
+  // A credentials file goes with a NATS address given here: with no address
+  // the search finds a central, which takes none, so the refusal comes
+  // before the search and before the file is read.
+  if (parsed.authFile && (!parsed.address || configModule.centralKind(configModule.normalizeCentralAddress(parsed.address) || '') !== 'nats')) {
+    process.stderr.write('A credentials file (--auth) goes with the address of a NATS server (nats:// or tls://) given on the command line; the central of egc mesh serve takes the team key alone.\n');
+    process.exitCode = 2;
+    return;
+  }
+  const target = parsed.address || await discoveredCentral();
   if (!target) return;
   try {
     const authKind = parsed.authFile ? await readAuthKind(parsed.authFile) : null;

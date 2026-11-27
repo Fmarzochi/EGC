@@ -237,13 +237,17 @@ export async function forgetRemoteMachine(db: BusDb, machineId: string): Promise
 }
 
 // Forgets the machines silent for longer than a session lives and returns
-// their ids, so the bridge forgets them too.
-export async function sweepRemoteMachines(db: BusDb, nowMs: number = Date.now()): Promise<string[]> {
+// their ids, so the bridge forgets them too. Selected and deleted in one
+// transaction, so a presence that lands in between cannot leave a live
+// machine among the ids returned.
+export function sweepRemoteMachines(db: BusDb, nowMs: number = Date.now()): Promise<string[]> {
   const cutoff = new Date(nowMs - REMOTE_MACHINE_TTL_SECONDS * 1000).toISOString();
-  const rows = await db.all('SELECT machine_id FROM mesh_machines WHERE seen_at < ?', cutoff);
-  if (rows.length === 0) return [];
-  await db.run('DELETE FROM mesh_machines WHERE seen_at < ?', cutoff);
-  return rows.map(row => rowText(row.machine_id));
+  return withBusTransaction(db, async () => {
+    const rows = await db.all('SELECT machine_id FROM mesh_machines WHERE seen_at < ?', cutoff);
+    if (rows.length === 0) return [];
+    await db.run('DELETE FROM mesh_machines WHERE seen_at < ?', cutoff);
+    return rows.map(row => rowText(row.machine_id));
+  });
 }
 
 function parseSessions(raw: unknown): unknown[] {

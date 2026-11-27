@@ -179,6 +179,18 @@ export class BridgeLock {
   }
 }
 
+// One writer at a time: inside a memory server the bridge takes its turn with
+// the write arbiter of the server; alone, its own writes queue behind each
+// other here, since two transactions cannot share one connection.
+function chainedQueue(): <T>(work: () => Promise<T>) => Promise<T> {
+  let tail: Promise<unknown> = Promise.resolve();
+  return <T>(work: () => Promise<T>): Promise<T> => {
+    const next = tail.then(work, work);
+    tail = next.catch(() => undefined);
+    return next;
+  };
+}
+
 export class MeshBridge {
   readonly online = new Set<string>();
   connected = false;
@@ -207,6 +219,7 @@ export class MeshBridge {
   private readonly sealKey: Buffer;
   private readonly now: () => number;
   private readonly log: (line: string) => void;
+  private readonly serialize: <T>(work: () => Promise<T>) => Promise<T>;
 
   constructor(private readonly options: BridgeOptions) {
     this.identity = options.machine;
@@ -215,6 +228,7 @@ export class MeshBridge {
     this.replay = new ReplayGuard(this.now);
     this.authKey = meshAuthKey(options.teamKey);
     this.sealKey = meshSealKey(options.teamKey);
+    this.serialize = options.enqueue ?? chainedQueue();
   }
 
   get machine(): MachineIdentity {
@@ -223,6 +237,12 @@ export class MeshBridge {
 
   get central(): string {
     return this.options.central;
+  }
+
+  // The credentials file this bridge opens a NATS server with; null for the
+  // central, and for a server that asks for none.
+  get authFile(): string | null {
+    return this.options.authFile ?? null;
   }
 
   // True once the bridge is down for good: after stop(), or when another
@@ -465,10 +485,9 @@ export class MeshBridge {
     if (from === this.identity.id) return;
     const opened = openBox(this.sealKey, { from, to, id }, box);
     if (!opened || !this.replay.accept(id, opened.ts)) return;
-    const serialize = this.options.enqueue ?? (<T>(work: () => Promise<T>) => work());
     let taken: boolean;
     try {
-      taken = await serialize(() => withBusTransaction(this.options.db, async () => {
+      taken = await this.serialize(() => withBusTransaction(this.options.db, async () => {
         if (!(await rememberBox(this.options.db, id, this.now()))) return false;
         await this.applyMessage(from, opened.message);
         return true;
@@ -555,9 +574,11 @@ export class MeshBridge {
   // bridge is alive.
   private startPresence(): void {
     if (this.presenceTimer) clearInterval(this.presenceTimer);
+    // The sweep takes its turn with the other writers, since it runs in a
+    // transaction of its own.
     const tick = (): void => {
       this.announce().catch(error => this.log(`mesh: presence was not sent: ${error instanceof Error ? error.message : String(error)}`));
-      sweepRemoteMachines(this.options.db, this.now())
+      this.serialize(() => sweepRemoteMachines(this.options.db, this.now()))
         .then(swept => {
           for (const id of swept) this.online.delete(id);
         })
@@ -695,7 +716,9 @@ export function startBridgeIfElected(options: StartBridgeOptions): BridgeHandle 
         return;
       }
       const config = readMeshConfig(home);
-      const keeps = lock?.renew() === true && config !== null && config.central === bridge.central && !bridge.isStopped;
+      // A central or a credentials file changed with egc mesh connect is
+      // joined by the next bridge: this one steps down.
+      const keeps = lock?.renew() === true && config !== null && config.central === bridge.central && config.authFile === bridge.authFile && !bridge.isStopped;
       if (!keeps) stepDown().catch(() => undefined);
     } catch (error) {
       log(`mesh: the bridge election failed: ${error instanceof Error ? error.message : String(error)}`);

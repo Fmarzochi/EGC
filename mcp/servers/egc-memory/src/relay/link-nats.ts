@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 
-import type { ConnectionOptions } from 'nats';
+import type { ConnectionOptions } from '@nats-io/transport-node';
 
 import { teamTag } from './discovery';
 import type { CentralLink, LinkClose, LinkEvents, LinkOptions } from './link';
@@ -64,7 +64,7 @@ export async function readNatsAuth(file: string | null | undefined): Promise<{ k
   if (process.platform !== 'win32' && (stat.mode & 0o077) !== 0) throw new Error(`the NATS credentials file ${file} is readable by other users: chmod 600 ${file}`);
   const text = fs.readFileSync(file, 'utf8');
   if (text.includes(CREDS_MARK)) {
-    const { credsAuthenticator } = await import('nats');
+    const { credsAuthenticator } = await import('@nats-io/transport-node');
     return { kind: 'creds', options: { authenticator: credsAuthenticator(new TextEncoder().encode(text)) } };
   }
   let parsed: unknown;
@@ -97,7 +97,7 @@ export function parseDelivery(raw: string): HubFrame | null {
 }
 
 async function connectWithLibrary(options: ConnectionOptions): Promise<NatsClient> {
-  const nats = await import('nats');
+  const nats = await import('@nats-io/transport-node');
   return nats.connect(options) as unknown as Promise<NatsClient>;
 }
 
@@ -121,12 +121,13 @@ export function openNatsLink(options: NatsLinkOptions, events: LinkEvents): Cent
   };
   // The library reconnects on its own by default; here it does not, so that
   // one loss of the connection is one close of the link and the bridge
-  // reconnects with the backoff it has for the central. The server does not
-  // echo this machine's own boxes back; the bridge would drop them anyway.
+  // reconnects with the backoff it has for the central. This machine's own
+  // boxes come back from the server like any other and the bridge drops
+  // them, so nothing is asked of the server beyond publish and subscribe.
   const open = async (): Promise<void> => {
     const auth = await readNatsAuth(options.authFile);
     const connect = options.connect ?? connectWithLibrary;
-    const connected = await connect({ servers: options.central, name: `egc-mesh ${options.machineId.slice(0, 8)}`, reconnect: false, timeout: NATS_CONNECT_TIMEOUT_MS, noEcho: true, ...auth.options });
+    const connected = await connect({ servers: options.central, name: `egc-mesh ${options.machineId.slice(0, 8)}`, reconnect: false, timeout: NATS_CONNECT_TIMEOUT_MS, ...auth.options });
     if (closing) {
       await connected.close().catch(() => undefined);
       throw new Error('closed before it opened');
@@ -153,7 +154,9 @@ export function openNatsLink(options: NatsLinkOptions, events: LinkEvents): Cent
       const payload = Buffer.from(JSON.stringify({ v: MESH_PROTOCOL_VERSION, from: options.machineId, to, id, box }), 'utf8');
       const max = connected.info?.max_payload;
       if (typeof max === 'number' && payload.length > max) {
-        // Behind us: a box the server would refuse waits for nothing.
+        // Behind us, as a frame above the cap of the central is: a box this
+        // server will never take cannot hold the queue, and every box after
+        // it, hostage; it is said in the log and left on this machine.
         options.log(`mesh: a box of ${payload.length} bytes is above the max_payload of the NATS server (${max}) and stays on this machine`);
         return true;
       }
@@ -170,11 +173,15 @@ export function openNatsLink(options: NatsLinkOptions, events: LinkEvents): Cent
       const connected = client;
       client = null;
       if (connected) {
-        // What was published last (a goodbye) goes out before the close.
+        // What was published last (a goodbye) goes out before the close; a
+        // flush that does not come back in time is not waited for, and the
+        // connection is closed either way, so no client stays subscribed
+        // behind a link the bridge let go of.
         await Promise.race([
-          connected.flush().catch(() => undefined).then(() => connected.close()),
+          connected.flush().catch(() => undefined),
           new Promise<void>(resolve => setTimeout(resolve, CLOSE_WAIT_MS).unref()),
-        ]).catch(() => undefined);
+        ]);
+        await connected.close().catch(() => undefined);
       }
       tellClosed({ kind: 'lost', reason: 'closed' });
     },

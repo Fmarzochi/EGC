@@ -44,6 +44,8 @@ function normalizeCentralAddress(value) {
   }
   if (!/^(?:wss?|nats|tls):$/.test(url.protocol) || !url.hostname) return null;
   if (url.username || url.password) return null;
+  // A NATS address is host and port alone: credentials come from --auth.
+  if (/^(?:nats|tls):$/.test(url.protocol) && (url.search || url.hash || (url.pathname && url.pathname !== '/'))) return null;
   if (!scheme && !url.port) url.port = String(DEFAULT_CENTRAL_PORT);
   return url.toString().replace(/\/$/, '');
 }

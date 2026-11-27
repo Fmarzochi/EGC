@@ -156,7 +156,12 @@ function startNatsServer(binary, extraArgs = []) {
   const exited = new Promise(resolve => child.on('exit', resolve));
   let out = '';
   const address = new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`nats-server did not listen in time:\n${out}`)), CLI_TIMEOUT_MS);
+    // A server that never listens is killed here, so a failure of the
+    // optional server never leaves a process behind the suite.
+    const timer = setTimeout(() => {
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+      reject(new Error(`nats-server did not listen in time:\n${out}`));
+    }, CLI_TIMEOUT_MS);
     const watch = chunk => {
       out += chunk;
       const match = /Listening for client connections on 127\.0\.0\.1:(\d+)/.exec(out);
@@ -189,7 +194,7 @@ async function runTests() {
   const { openCompatDatabase } = await import(pathToFileURL(path.join(BUILD, 'sqlite-compat.js')).href);
   const bus = await import(pathToFileURL(path.join(BUILD, 'session-bus.js')).href);
   const encryption = await import(pathToFileURL(path.join(BUILD, 'encryption.js')).href);
-  const nkeys = require(require.resolve('nkeys.js', { paths: [SERVER_DIR] }));
+  const nkeys = require(require.resolve('@nats-io/nkeys', { paths: [SERVER_DIR] }));
 
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-mesh-nats-'));
   const teamKey = Buffer.alloc(32, 11);
@@ -222,9 +227,14 @@ async function runTests() {
         ['nats://broker.example.com', 'nats://broker.example.com'],
         ['nats://[fe80::1]:4222', 'nats://[fe80::1]:4222'],
         ['nats://alice:secret@broker.example.com:4222', null],
+        ['nats://broker.example.com:4222?token=synthetic', null],
+        ['nats://broker.example.com:4222/leaf', null],
+        ['tls://broker.example.com:4222#fragment', null],
+        ['nats://broker.example.com:4222/', 'nats://broker.example.com:4222'],
         ['mqtt://broker.example.com:1883', null],
         ['http://broker.example.com', null],
         ['broker.example.com', 'ws://broker.example.com:47470'],
+        ['wss://mesh.example.com/relay', 'wss://mesh.example.com/relay'],
       ];
       for (const [given, expected] of cases) {
         assert.strictEqual(meshConfig.normalizeCentralAddress(given), expected, `runtime: ${given}`);
@@ -238,6 +248,21 @@ async function runTests() {
       const subjects = linkNats.meshSubjects('abcdef012345');
       assert.strictEqual(subjects.all, 'egc.mesh.abcdef012345.all');
       assert.strictEqual(subjects.to('f'.repeat(32)), `egc.mesh.abcdef012345.to.${'f'.repeat(32)}`);
+    });
+
+    await test('the credentials file kept in mesh.json stays while the central is the same and nothing is said about it, and goes when the central changes or null is given', () => {
+      const home = path.join(root, 'home-config');
+      fs.mkdirSync(home, { recursive: true });
+      const authFile = path.join(home, 'nats-auth.json');
+      fs.writeFileSync(authFile, JSON.stringify({ token: 'synthetic' }), { mode: 0o600 });
+      assert.strictEqual(meshConfig.writeMeshConfig('nats://broker.local:4222', home, { authFile }).authFile, authFile);
+      assert.strictEqual(meshConfig.writeMeshConfig('nats://broker.local:4222', home).authFile, authFile, 'a write of the same central with nothing said keeps the file');
+      assert.strictEqual(meshConfig.readMeshConfig(home).authFile, authFile);
+      assert.strictEqual(meshConfig.writeMeshConfig('nats://broker.local:4222', home, { authFile: null }).authFile, null, 'null forgets it');
+      assert.strictEqual(meshConfig.writeMeshConfig('nats://broker.local:4222', home, { authFile }).authFile, authFile);
+      assert.strictEqual(meshConfig.writeMeshConfig('nats://other.local:4222', home).authFile, null, 'another central starts without it');
+      assert.strictEqual(meshConfig.writeMeshConfig('nats://broker.local:4222', home, { authFile }).authFile, authFile);
+      assert.strictEqual(meshConfig.writeMeshConfig('192.168.1.50:47470', home).authFile, null, 'the central of egc mesh serve takes none');
     });
 
     await test('the credentials file is a .creds file, or JSON with a token, or with a user and a pass; anything else, and a file others can read, is refused', async () => {
@@ -401,6 +426,16 @@ async function runTests() {
       const dangling = run(['connect', 'nats://broker.local:4222', '--auth']);
       assert.strictEqual(dangling.status, 2);
       assert.match(dangling.stderr, /--auth takes the path/);
+      const noAddress = run(['connect', '--auth', authFile]);
+      assert.strictEqual(noAddress.status, 2, 'a credentials file with no address is refused before any search');
+      assert.match(noAddress.stderr, /given on the command line/);
+      assert.ok(!noAddress.stdout.includes('Looking for the central'), 'no search ran');
+      const again = run(['connect', 'nats://broker.local:4222', '--auth', authFile]);
+      assert.strictEqual(again.status, 0, again.stderr);
+      const kept = run(['connect', 'nats://broker.local:4222']);
+      assert.strictEqual(kept.status, 0, kept.stderr);
+      assert.ok(!kept.stdout.includes('Auth:'), 'connect with no --auth forgets the credentials file on purpose');
+      assert.strictEqual(JSON.parse(fs.readFileSync(path.join(home, '.egc', 'mesh.json'), 'utf8')).authFile, null);
     });
 
     await test('the Mesh block of the doctor names the NATS server, its credentials file, and warns when the file is gone or the bridge cannot reach the server', () => {
@@ -421,11 +456,26 @@ async function runTests() {
       report = buildMeshReport(home);
       assert.strictEqual(report.warningCount, 1, doctorLines(report));
       assert.ok(doctorLines(report).includes('check that your NATS server runs there'), doctorLines(report));
+      fs.writeFileSync(authFile, 'not json', { mode: 0o600 });
+      report = buildMeshReport(home);
+      assert.strictEqual(report.warningCount, 2, doctorLines(report));
+      text = doctorLines(report);
+      assert.ok(text.includes(`[WARNING] the credentials file ${authFile} that egc mesh connect --auth named is neither a .creds file nor JSON`), text);
+      if (process.platform !== 'win32') {
+        const openFile = path.join(home, 'nats-open.json');
+        fs.writeFileSync(openFile, JSON.stringify({ token: 'synthetic' }), { mode: 0o644 });
+        fs.writeFileSync(path.join(home, '.egc', 'mesh.json'), JSON.stringify({ central: 'nats://broker.example.com:4222', authFile: openFile, connectedAt: '2026-11-27T10:00:00.000Z' }));
+        assert.ok(doctorLines(buildMeshReport(home)).includes('is readable by other users'), 'the doctor sees what the bridge will refuse');
+        fs.writeFileSync(path.join(home, '.egc', 'mesh.json'), JSON.stringify({ central: 'nats://broker.example.com:4222', authFile, connectedAt: '2026-11-27T10:00:00.000Z' }));
+      }
       fs.rmSync(authFile);
       report = buildMeshReport(home);
       assert.strictEqual(report.warningCount, 2, doctorLines(report));
       text = doctorLines(report);
       assert.ok(text.includes(`[WARNING] the credentials file ${authFile} that egc mesh connect --auth named is gone`), text);
+      fs.writeFileSync(path.join(home, '.egc', 'mesh.json'), JSON.stringify({ central: 'nats://broker.example.com:4222', connectedAt: '2026-11-27T10:00:00.000Z' }));
+      text = doctorLines(buildMeshReport(home));
+      assert.ok(text.includes('reachable from this machine') && !text.includes('credentials file'), 'a server that asks for no credentials gets a warning that names none');
     });
 
     const natsServer = findNatsServer();
