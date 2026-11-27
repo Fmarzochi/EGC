@@ -27,6 +27,11 @@ const path = require('node:path');
 
 const HOST_LABEL = 'OpenHands';
 const PRE_TOOL_USE_EVENT = 'pre_tool_use';
+// The session events, in the same file and shape and with no matcher
+// (OpenHands matches a session event to every group, with or without one):
+// session_start restores the project memory, stop pushes the Team Brain.
+const SESSION_START_EVENT = 'session_start';
+const STOP_EVENT = 'stop';
 const TERMINAL_MATCHER = 'terminal';
 const GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/openhands-guardian-adapter.js';
 
@@ -94,7 +99,8 @@ function addOpenHandsHookEntry(config, event, matcher, command) {
   });
 
   if (!present) {
-    groups.push({ matcher, hooks: [{ type: 'command', command }] });
+    const entry = { type: 'command', command };
+    groups.push(matcher === undefined ? { hooks: [entry] } : { matcher, hooks: [entry] });
   }
 
   return { config: { ...base, [event]: groups }, changed: true };
@@ -148,49 +154,68 @@ function resolveHooksJsonPath(projectRoot) {
   return path.join(projectRoot, '.openhands', 'hooks.json');
 }
 
-function applyOpenHandsGuardianHookToFile(hooksJsonPath, adapterScriptPath) {
-  const command = buildHookCommand(adapterScriptPath);
+// One EGC script under one event of the file, with a matcher for a tool
+// event and none for a session event.
+function applyOpenHandsHookToFile(hooksJsonPath, scriptPath, event, matcher) {
+  const command = buildHookCommand(scriptPath);
   const current = readHooksFile(hooksJsonPath);
-  const { config, changed } = addOpenHandsHookEntry(current, PRE_TOOL_USE_EVENT, TERMINAL_MATCHER, command);
+  const { config, changed } = addOpenHandsHookEntry(current, event, matcher, command);
   if (changed) {
     writeHooksFile(hooksJsonPath, config);
   }
   return { changed };
 }
 
-function removeOpenHandsGuardianHookFromFile(hooksJsonPath, adapterScriptPath) {
+function removeOpenHandsHookFromFile(hooksJsonPath, scriptPath, event, matcher) {
   if (!fs.existsSync(hooksJsonPath)) {
     return { changed: false };
   }
-  const command = buildHookCommand(adapterScriptPath);
+  const command = buildHookCommand(scriptPath);
   const current = readHooksFile(hooksJsonPath);
-  const { config, changed } = removeOpenHandsHookEntry(current, PRE_TOOL_USE_EVENT, TERMINAL_MATCHER, command);
+  const { config, changed } = removeOpenHandsHookEntry(current, event, matcher, command);
   if (changed) {
     writeHooksFile(hooksJsonPath, config);
   }
   return { changed };
 }
 
-function inspectOpenHandsGuardianHookFile(hooksJsonPath, adapterScriptPath) {
+function inspectOpenHandsHookFile(hooksJsonPath, scriptPath, event, matcher) {
   try {
-    const command = buildHookCommand(adapterScriptPath);
+    const command = buildHookCommand(scriptPath);
     const current = readHooksFile(hooksJsonPath);
-    return hasOpenHandsHookEntry(current, PRE_TOOL_USE_EVENT, TERMINAL_MATCHER, command) ? 'ok' : 'drifted';
+    return hasOpenHandsHookEntry(current, event, matcher, command) ? 'ok' : 'drifted';
   } catch {
     return 'drifted';
   }
 }
 
+function applyOpenHandsGuardianHookToFile(hooksJsonPath, adapterScriptPath) {
+  return applyOpenHandsHookToFile(hooksJsonPath, adapterScriptPath, PRE_TOOL_USE_EVENT, TERMINAL_MATCHER);
+}
+
+function removeOpenHandsGuardianHookFromFile(hooksJsonPath, adapterScriptPath) {
+  return removeOpenHandsHookFromFile(hooksJsonPath, adapterScriptPath, PRE_TOOL_USE_EVENT, TERMINAL_MATCHER);
+}
+
+function inspectOpenHandsGuardianHookFile(hooksJsonPath, adapterScriptPath) {
+  return inspectOpenHandsHookFile(hooksJsonPath, adapterScriptPath, PRE_TOOL_USE_EVENT, TERMINAL_MATCHER);
+}
+
 module.exports = {
   GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
   PRE_TOOL_USE_EVENT,
+  SESSION_START_EVENT,
+  STOP_EVENT,
   TERMINAL_MATCHER,
   addOpenHandsHookEntry,
   applyOpenHandsGuardianHookToFile,
+  applyOpenHandsHookToFile,
   buildHookCommand,
   inspectOpenHandsGuardianHookFile,
+  inspectOpenHandsHookFile,
   removeOpenHandsGuardianHookFromFile,
   removeOpenHandsHookEntry,
+  removeOpenHandsHookFromFile,
   resolveGuardianAdapterScriptDestination,
   resolveHooksJsonPath,
 };

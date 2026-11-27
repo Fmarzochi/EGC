@@ -22,7 +22,7 @@ const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 const REPO_ROOT = path.join(__dirname, '..', '..');
 const HOOKS = path.join(REPO_ROOT, 'scripts', 'hooks');
 const STOP = path.join(HOOKS, 'team-sync-stop.js');
-const HOSTS = ['qwen', 'codebuddy', 'junie', 'auggie', 'goose', 'droid'];
+const HOSTS = ['qwen', 'codebuddy', 'junie', 'auggie', 'goose', 'droid', 'openhands'];
 
 let passed = 0;
 let failed = 0;
@@ -94,6 +94,7 @@ const payloads = {
   auggie: { hook_event_name: 'SessionStart', conversation_id: 'auggie-1', workspace_roots: [project], cwd: elsewhere },
   goose: { event: 'SessionStart', session_id: 'goose-1', working_dir: project },
   droid: { session_id: 'droid-1', transcript_path: '', cwd: project, permission_mode: 'default', hook_event_name: 'SessionStart', source: 'startup' },
+  openhands: { event_type: 'session_start', session_id: 'openhands-1', working_dir: project },
 };
 
 try {
