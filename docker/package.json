@@ -3,6 +3,6 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
-    "mcp-proxy": "6.10.0"
+    "mcp-proxy": "6.11.0"
   }
 }
