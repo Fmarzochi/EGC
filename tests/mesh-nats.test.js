@@ -462,8 +462,11 @@ async function runTests() {
       text = doctorLines(report);
       assert.ok(text.includes(`[WARNING] the credentials file ${authFile} that egc mesh connect --auth named is neither a .creds file nor JSON`), text);
       if (process.platform !== 'win32') {
+        // Group-readable on purpose, set after the write so the umask of the
+        // runner has no say: enough for the bridge, and the doctor, to refuse.
         const openFile = path.join(home, 'nats-open.json');
-        fs.writeFileSync(openFile, JSON.stringify({ token: 'synthetic' }), { mode: 0o644 });
+        fs.writeFileSync(openFile, JSON.stringify({ token: 'synthetic' }));
+        fs.chmodSync(openFile, 0o640);
         fs.writeFileSync(path.join(home, '.egc', 'mesh.json'), JSON.stringify({ central: 'nats://broker.example.com:4222', authFile: openFile, connectedAt: '2026-11-27T10:00:00.000Z' }));
         assert.ok(doctorLines(buildMeshReport(home)).includes('is readable by other users'), 'the doctor sees what the bridge will refuse');
         fs.writeFileSync(path.join(home, '.egc', 'mesh.json'), JSON.stringify({ central: 'nats://broker.example.com:4222', authFile, connectedAt: '2026-11-27T10:00:00.000Z' }));
