@@ -236,8 +236,14 @@ export async function forgetRemoteMachine(db: BusDb, machineId: string): Promise
   await db.run('DELETE FROM mesh_machines WHERE machine_id = ?', machineId);
 }
 
-export async function sweepRemoteMachines(db: BusDb, nowMs: number = Date.now()): Promise<void> {
-  await db.run('DELETE FROM mesh_machines WHERE seen_at < ?', new Date(nowMs - REMOTE_MACHINE_TTL_SECONDS * 1000).toISOString());
+// Forgets the machines silent for longer than a session lives and returns
+// their ids, so the bridge forgets them too.
+export async function sweepRemoteMachines(db: BusDb, nowMs: number = Date.now()): Promise<string[]> {
+  const cutoff = new Date(nowMs - REMOTE_MACHINE_TTL_SECONDS * 1000).toISOString();
+  const rows = await db.all('SELECT machine_id FROM mesh_machines WHERE seen_at < ?', cutoff);
+  if (rows.length === 0) return [];
+  await db.run('DELETE FROM mesh_machines WHERE seen_at < ?', cutoff);
+  return rows.map(row => rowText(row.machine_id));
 }
 
 function parseSessions(raw: unknown): unknown[] {
