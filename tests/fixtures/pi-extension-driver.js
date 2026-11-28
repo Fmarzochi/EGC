@@ -4,10 +4,11 @@
 // Drives an EGC extension for pi the way pi does, in a process of its own,
 // so HOME and the project are the ones the test chose: registers the
 // handlers the extension declares, runs the steps the payload asks for (an
-// event name, with a file whose mtime moves first when `touch` names one,
-// as the bus store does when another session writes) and prints the events
-// registered and what each step answered. The payload comes as JSON in the
-// third argument; the extension path in the second.
+// event name, with a file whose mtime moves first when `touch` names one, as
+// the bus store does when another session writes, or a file written first
+// when `write` names one, as the memory server does when the state changes)
+// and prints the events registered and what each step answered. The payload
+// comes as JSON in the third argument; the extension path in the second.
 
 const fs = require('node:fs');
 
@@ -29,6 +30,7 @@ async function main() {
       const moved = new Date(Date.now() + (step.advanceMs || 0));
       fs.utimesSync(step.touch, moved, moved);
     }
+    if (step.write) fs.writeFileSync(step.write.path, step.write.content);
     const handler = handlers.get(step.event);
     answers.push(handler ? await handler({}, ctx) : null);
   }
