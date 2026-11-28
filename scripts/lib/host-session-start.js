@@ -2,15 +2,16 @@
 
 // The session-start hook of the hosts that name their fields their own way
 // (Qwen Code, CodeBuddy, Junie, Auggie, Goose, Droid, OpenHands, Devin, Kimi
-// Code, Mistral Vibe, Crush). The payload comes on stdin; the project is the
-// root the host names, before its working directory, since the memory is
-// keyed by project; the shared session adapter pulls the Team Brain when the
-// team asks for it, restores the project memory and emits telemetry, as it
-// does for Claude, OpenCode, Cursor and Copilot; and the answer goes out in
-// the shape the host reads, additionalContext at the top and under
-// hookSpecificOutput for most, snake_case for Vibe. A host that reads
-// nothing from this hook (Junie, Auggie, Kimi Code, Crush) still gets the
-// pull. Each host has a thin wrapper in scripts/hooks/<host>-session-start.js.
+// Code, Mistral Vibe, Crush, Grok Build, Letta Code). The payload comes on
+// stdin; the project is the root the host names, before its working
+// directory, since the memory is keyed by project; the shared session adapter
+// pulls the Team Brain when the team asks for it, restores the project memory
+// and emits telemetry, as it does for Claude, OpenCode, Cursor and Copilot;
+// and the answer goes out in the shape the host reads, additionalContext at
+// the top and under hookSpecificOutput for most, snake_case for Vibe. A host
+// that reads nothing from this hook (Junie, Auggie, Kimi Code, Crush, Grok,
+// Letta) still gets the pull. Each host has a thin wrapper in
+// scripts/hooks/<host>-session-start.js.
 
 const fs = require('node:fs');
 
@@ -29,13 +30,22 @@ function firstString(...values) {
 }
 
 // The project: project_path (Junie), the first workspace root (Auggie),
-// then cwd (Qwen, CodeBuddy, Droid, Kimi Code, Vibe, Crush) or working_dir
-// (Goose), then the project directory a host exports instead of naming it
-// in the payload (DEVIN_PROJECT_DIR); a payload that names nothing leaves
-// the working directory of the hook, which a project hook runs from.
+// workspaceRoot (Grok), then cwd (Qwen, CodeBuddy, Droid, Kimi Code, Vibe,
+// Crush), working_dir (Goose, OpenHands) or working_directory (Letta), then
+// the project directory a host exports instead of naming it in the payload
+// (DEVIN_PROJECT_DIR); a payload that names nothing leaves the working
+// directory of the hook, which a project hook runs from.
 function projectOf(payload, env = process.env) {
   const roots = Array.isArray(payload.workspace_roots) ? payload.workspace_roots : [];
-  return firstString(payload.project_path, ...roots, payload.cwd, payload.working_dir, env.DEVIN_PROJECT_DIR) || process.cwd();
+  return firstString(
+    payload.project_path,
+    ...roots,
+    payload.workspaceRoot,
+    payload.cwd,
+    payload.working_dir,
+    payload.working_directory,
+    env.DEVIN_PROJECT_DIR
+  ) || process.cwd();
 }
 
 // The session: session_id (most hosts), sessionId, or the conversation
