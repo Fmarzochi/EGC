@@ -79,30 +79,23 @@ function isEgcHookCommandEntry(entry, command) {
 // Mirrors claude-settings-hooks.js's mergeMatcherGroups/buildNewGroup
 // shape, adapted for OpenHands' matcher-group array (no isOwnBasename
 // migration here -- OpenHands is a brand-new integration with no prior
-// install path to migrate away from).
+// install path to migrate away from). The command goes into the first
+// group of the event with that matcher, and into a new group when there is
+// none: OpenHands runs every group a call matches, so a command in two
+// groups would run twice. Nothing changes when a group already has it.
 function addOpenHandsHookEntry(config, event, matcher, command) {
   const base = isPlainObject(config) ? config : {};
-  const existingGroups = Array.isArray(base[event]) ? base[event] : [];
-
-  let present = false;
-  const groups = existingGroups.map(group => {
-    if (!isMatcherGroup(group, matcher)) {
-      return group;
-    }
-    const hooks = Array.isArray(group.hooks) ? group.hooks : [];
-    if (hooks.some(entry => isEgcHookCommandEntry(entry, command))) {
-      present = true;
-      return group;
-    }
-    present = true;
-    return { ...group, hooks: [...hooks, { type: 'command', command }] };
-  });
-
-  if (!present) {
-    const entry = { type: 'command', command };
-    groups.push(matcher === undefined ? { hooks: [entry] } : { matcher, hooks: [entry] });
+  if (hasOpenHandsHookEntry(base, event, matcher, command)) {
+    return { config: base, changed: false };
   }
-
+  const existingGroups = Array.isArray(base[event]) ? base[event] : [];
+  const entry = { type: 'command', command };
+  const first = existingGroups.findIndex(group => isMatcherGroup(group, matcher));
+  const groups = first === -1
+    ? [...existingGroups, matcher === undefined ? { hooks: [entry] } : { matcher, hooks: [entry] }]
+    : existingGroups.map((group, index) => (index === first
+      ? { ...group, hooks: [...(Array.isArray(group.hooks) ? group.hooks : []), entry] }
+      : group));
   return { config: { ...base, [event]: groups }, changed: true };
 }
 

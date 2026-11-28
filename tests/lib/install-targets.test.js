@@ -2959,11 +2959,15 @@ function runTests() {
     const plan = planInstallTargetScaffold({ target: 'openhands-project', repoRoot, projectRoot, homeDir: '/Users/example', modules: [] });
     const merges = plan.operations.filter(operation => operation.kind === 'merge-claude-settings-hooks' && operation.destinationPath === hooksFile);
     assert.deepStrictEqual(
-      merges.map(operation => [operation.hookEvent, path.basename(operation.hookScriptPath)]).sort(),
-      [['pre_tool_use', 'openhands-guardian-adapter.js'], ['session_start', 'openhands-session-start.js'], ['stop', 'team-sync-stop.js']],
-      'the Guardian keeps its event, the session hooks take the snake_case events of the file'
+      merges.map(operation => [operation.hookEvent, operation.hookScriptPath, operation.hookMatcher]).sort(),
+      [
+        ['pre_tool_use', path.join(root, 'scripts', 'hooks', 'openhands-guardian-adapter.js'), undefined],
+        ['session_start', path.join(root, 'scripts', 'hooks', 'openhands-session-start.js'), undefined],
+        ['stop', path.join(root, 'scripts', 'hooks', 'team-sync-stop.js'), undefined],
+      ],
+      'the Guardian keeps its event (its terminal matcher lives in its handler), the session hooks take the snake_case events of the file and carry no matcher, every script under .openhands'
     );
-    for (const source of ['scripts/hooks/openhands-session-start.js', 'scripts/hooks/team-sync-stop.js', 'scripts/lib/host-session-start.js', 'scripts/lib/session-start-adapter.js', 'scripts/lib/team-autosync.js', 'scripts/check-state-leak.js']) {
+    for (const source of ['scripts/hooks/openhands-session-start.js', 'scripts/hooks/team-sync-stop.js', 'scripts/lib/host-session-start.js', 'scripts/lib/session-start-adapter.js', 'scripts/lib/session-context-loader.js', 'scripts/lib/team-autosync.js', 'scripts/check-state-leak.js']) {
       assert.ok(
         plan.operations.some(operation => normalizedRelativePath(operation.sourceRelativePath) === source
           && operation.destinationPath === path.join(root, ...source.split('/'))),
