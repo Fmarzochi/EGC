@@ -166,10 +166,11 @@ class WasmDatabase {
   }
 
   async all(sql, ...params) {
-    // A statement that writes and gives rows back (DELETE or UPDATE with
-    // RETURNING) is a write first: it runs under the write lock and is
-    // persisted, as run() does, so the rows it returns are the rows that
-    // left the file.
+    // A statement the classifier counts as a write (a DELETE or UPDATE with
+    // RETURNING is the one that comes through here) is a write first: it
+    // runs under the write lock and is persisted, as run() does, so the rows
+    // it returns are the rows that left the file. A reporting pragma such as
+    // table_info(...) is a read for the classifier and takes no lock.
     if (mutates(sql) && !this._inTransaction) {
       return this.withWriteLock(() => this.readRows(sql, params));
     }

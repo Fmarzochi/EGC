@@ -15,6 +15,7 @@ const os = require('os');
 const path = require('path');
 
 const { openWasmDatabase } = require('../../scripts/lib/state-store/sqlite-compat-wasm');
+const { mutates } = require('../../scripts/lib/state-store/sqlite-compat-sql');
 
 let passed = 0;
 let failed = 0;
@@ -49,13 +50,21 @@ async function main() {
       await again.close();
     });
 
-    await test('a SELECT through all() writes nothing to the file', async () => {
+    await test('a SELECT and a reporting pragma through all() write nothing to the file', async () => {
       const before = fs.statSync(file).mtimeMs;
       const db = await openWasmDatabase(file, null);
       const rows = await db.all('SELECT id FROM machines');
       assert.strictEqual(rows.length, 1);
+      const columns = await db.all('PRAGMA table_info(machines)');
+      assert.deepStrictEqual(columns.map(column => column.name), ['id', 'seen_at']);
       await db.close();
       assert.strictEqual(fs.statSync(file).mtimeMs, before, 'a read leaves the file as it was');
+      for (const read of ['PRAGMA table_info(machines)', 'PRAGMA table_xinfo(machines)', 'PRAGMA index_list(machines)', 'PRAGMA foreign_key_list(machines)', 'PRAGMA user_version']) {
+        assert.strictEqual(mutates(read), false, `${read} is a read`);
+      }
+      for (const write of ['PRAGMA user_version = 3', 'DELETE FROM machines WHERE id = 3 RETURNING id', 'UPDATE machines SET seen_at = seen_at']) {
+        assert.strictEqual(mutates(write), true, `${write} is a write`);
+      }
     });
 
     await test('an UPDATE with RETURNING through all() is written too', async () => {

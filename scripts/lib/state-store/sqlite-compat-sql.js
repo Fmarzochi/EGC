@@ -13,7 +13,10 @@ const SKIPPED_PRAGMA = /^PRAGMA[ \t]+(?:journal_mode|busy_timeout|synchronous)\b
 // Everything else (writes, DDL, ANALYZE, VACUUM, value-setting pragmas,
 // PRAGMA optimize, any CTE, any pragma not on the list) reaches the file; a
 // read misclassified as a write costs one extra save and nothing more.
-const REPORTING_PRAGMA = /^PRAGMA[ \t]+(?:user_version|schema_version|application_id|journal_mode|synchronous|foreign_keys|busy_timeout|page_size|page_count|freelist_count|integrity_check|quick_check|compile_options|database_list|table_list|collation_list|encoding)$/i;
+// The pragmas that only report, bare or with the object they describe in
+// parentheses: a statement the classifier counts as a write takes the write
+// lock and rewrites the file on the portable engine, so a read must not.
+const REPORTING_PRAGMA = /^PRAGMA[ \t]+(?:(?:user_version|schema_version|application_id|journal_mode|synchronous|foreign_keys|busy_timeout|page_size|page_count|freelist_count|integrity_check|quick_check|compile_options|database_list|table_list|collation_list|encoding)|(?:table_info|table_xinfo|index_list|index_info|index_xinfo|foreign_key_list)\([^)]*\))$/i;
 const READ_ONLY_STATEMENT = /^(?:SELECT\b|EXPLAIN\b)/i;
 
 const QUOTED_LITERAL = /'(?:[^']|'')*'|"(?:[^"]|"")*"/g;
