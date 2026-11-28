@@ -5833,6 +5833,24 @@ function runTests() {
       assert.strictEqual(hooks[0].destinationPath, path.join(root, 'hooks', 'egc-guardian.json'));
       assert.strictEqual(hooks[0].hookScriptPath, path.join(root, 'scripts', 'hooks', 'grok-guardian-adapter.js'));
       assert.strictEqual(GUARDIAN_MATCHER, 'Bash|Edit|Write|run_terminal_command|monitor|search_replace|write', 'the Guardian judges the shell and the file writes, by Claude name and by Grok native name');
+      const { GROK_SESSION_HOOK_FILES } = require('../../scripts/lib/grok-hooks');
+      const sessionFiles = plan.operations.filter(op => op.kind === 'merge-claude-settings-hooks' && op.hookEvent !== OPERATION_DISPATCH_TAG);
+      assert.deepStrictEqual(
+        sessionFiles.map(op => [op.hookEvent, op.destinationPath, op.hookScriptPath]).sort(),
+        [
+          [GROK_SESSION_HOOK_FILES.SessionStart.tag, path.join(root, 'hooks', 'egc-session-start.json'), path.join(root, 'scripts', 'hooks', 'grok-session-start.js')],
+          [GROK_SESSION_HOOK_FILES.Stop.tag, path.join(root, 'hooks', 'egc-stop.json'), path.join(root, 'scripts', 'hooks', 'team-sync-stop.js')],
+        ],
+        'the two session hooks are whole files EGC owns beside the Guardian one, each naming its script under the root'
+      );
+      const { SESSION_HOOK_LIB_SOURCES } = require('../../scripts/lib/claude-settings-hook-copy-operations');
+      for (const source of ['scripts/hooks/grok-session-start.js', 'scripts/hooks/team-sync-stop.js', ...SESSION_HOOK_LIB_SOURCES]) {
+        assert.ok(
+          plan.operations.some(op => normalizedRelativePath(op.sourceRelativePath) === source && op.destinationPath === path.join(root, ...source.split('/'))),
+          `${source} is copied with its path kept, by the Guardian or by the session hooks, so the requires resolve`
+        );
+      }
+      assert.strictEqual(new Set(destinations).size, destinations.length, 'no file is planned twice: the session runtime leaves to the Guardian what it already plants');
       assert.deepStrictEqual(plan.managedRoots, [path.resolve(root)], 'grok-home manages only its own root');
     } finally {
       if (previous === undefined) delete process.env.GROK_HOME;
@@ -5907,6 +5925,35 @@ function runTests() {
       assert.strictEqual(handlers.inspect(operation), 'drifted');
       assert.deepStrictEqual(handlers.remove(operation), { changed: true });
       assert.ok(!fs.existsSync(operation.destinationPath), 'uninstall removes the file EGC owns');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }));
+
+  tally(test('the Grok session hook files are written whole on the passive events with no matcher and a timeout above the default, reported drifted when edited, and removed on uninstall', () => {
+    const fs = require('fs');
+    const { resolveHookOperationHandlers } = require('../../scripts/lib/claude-settings-hooks');
+    const { GROK_SESSION_HOOK_FILES, buildGrokSessionHookDocument } = require('../../scripts/lib/grok-hooks');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-grok-session-hook-'));
+    try {
+      for (const [event, file] of Object.entries(GROK_SESSION_HOOK_FILES)) {
+        const operation = { hookEvent: file.tag, destinationPath: path.join(dir, 'hooks', file.fileName), hookScriptPath: path.join(dir, 'scripts', 'hooks', `${event.toLowerCase()}.js`) };
+        const handlers = resolveHookOperationHandlers(file.tag);
+        assert.deepStrictEqual(handlers.apply(operation), { changed: true }, `${event}: written`);
+        const written = JSON.parse(fs.readFileSync(operation.destinationPath, 'utf8'));
+        assert.deepStrictEqual(written, buildGrokSessionHookDocument(event, operation.hookScriptPath));
+        const [entry] = written.hooks[event];
+        assert.strictEqual(entry.matcher, undefined, `${event}: a passive event takes no matcher`);
+        assert.strictEqual(entry.hooks[0].type, 'command');
+        assert.ok(entry.hooks[0].command.includes(`${event.toLowerCase()}.js`));
+        assert.ok(entry.hooks[0].timeout > 5, `${event}: the timeout leaves room for the sync, above Grok's default of 5 s`);
+        assert.deepStrictEqual(handlers.apply(operation), { changed: false }, `${event}: a second apply is a no-op`);
+        assert.strictEqual(handlers.inspect(operation), 'ok');
+        fs.writeFileSync(operation.destinationPath, '{"hooks":{}}');
+        assert.strictEqual(handlers.inspect(operation), 'drifted');
+        assert.deepStrictEqual(handlers.remove(operation), { changed: true });
+        assert.ok(!fs.existsSync(operation.destinationPath), `${event}: uninstall removes the file EGC owns`);
+      }
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -6074,9 +6121,15 @@ function runTests() {
         ['scripts', 'hooks', 'pre-bash-guardian-validate.js'],
         ['scripts', 'hooks', 'pre-write-guardian-validate.js'],
         ['scripts', 'hooks', 'pre-bash-crusher-rewrite.js'],
+        ['scripts', 'lib', 'session-start-adapter.js'],
+        ['scripts', 'lib', 'session-context-loader.js'],
+        ['scripts', 'lib', 'team-autosync.js'],
+        ['scripts', 'check-state-leak.js'],
+        ['scripts', 'hooks', 'mesh-events-inject.js'],
       ]) {
         assert.ok(destinations.includes(path.join(root, ...expected)), `${expected.join('/')} is planned`);
       }
+      assert.strictEqual(new Set(destinations).size, destinations.length, 'no file is planned twice: the session runtime leaves to the gates what they already plant');
       assert.ok(!destinations.some(destination => destination.startsWith(path.join(root, 'commands') + path.sep)), 'commands land as prompt templates, not under commands/');
       process.env.PI_CODING_AGENT_DIR = '~/pi-data';
       assert.strictEqual(adapter.resolveRoot({ homeDir }), path.join(homeDir, 'pi-data'), 'a leading tilde is the home directory');
@@ -6137,10 +6190,15 @@ function runTests() {
       ['scripts', 'hooks', 'pre-bash-guardian-validate.js'],
       ['scripts', 'hooks', 'pre-write-guardian-validate.js'],
       ['scripts', 'hooks', 'crusher-hook.js'],
+      ['scripts', 'hooks', 'droid-session-start.js'],
+      ['scripts', 'hooks', 'team-sync-stop.js'],
+      ['scripts', 'hooks', 'mesh-events-inject.js'],
     ]) {
       assert.ok(destinations.includes(path.join(root, ...expected)), `${expected.join('/')} is planned`);
     }
     assert.ok(!destinations.some(destination => destination.startsWith(path.join(root, 'droids'))), 'no Markdown agent lands among the custom droids');
+    const copies = plan.operations.filter(op => op.kind !== 'merge-claude-settings-hooks').map(op => op.destinationPath);
+    assert.strictEqual(new Set(copies).size, copies.length, 'no file is planned twice: the mesh notice script comes alone, its team sync already travels with the session hooks');
     const hooks = plan.operations.filter(op => op.destinationPath === path.join(root, 'settings.json'));
     assert.deepStrictEqual(hooks.map(op => [op.moduleId, op.hookEvent, op.hookMatcher]), [
       ['egc-bash-guardian-hook', 'PreToolUse', 'Execute'],
@@ -6148,7 +6206,10 @@ function runTests() {
       ['egc-crusher-hook', 'PreToolUse', 'Execute'],
       ['egc-host-session-hook', 'SessionStart', undefined],
       ['egc-host-session-hook', 'Stop', undefined],
+      ['egc-mesh-notice-hook', 'UserPromptSubmit', undefined],
     ]);
+    const notice = hooks.find(op => op.hookEvent === 'UserPromptSubmit');
+    assert.strictEqual(notice.hookScriptPath, path.join(root, 'scripts', 'hooks', 'mesh-events-inject.js'), 'the UserPromptSubmit entry runs the shared notice script under the Droid root');
   }));
 
   tally(test('droid-home warns when ~/.factory is absent, naming the tool and its docs (#1493)', () => {
@@ -6342,9 +6403,10 @@ function runTests() {
     assert.ok(!destinations.includes(path.join(root, 'AGENTS.md')), 'AGENTS.md never lands at the live root: Letta Code does not read it');
   }));
 
-  tally(test('letta-home has no Guardian, Crusher or MCP registration: no documented hook surface or MCP config file for the Letta Code CLI (#1500)', () => {
+  tally(test('letta-home registers SessionStart and Stop in ~/.letta/settings.json with the session runtime under ~/.letta/scripts, and still no Guardian, Crusher or MCP registration (#1500)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/home/example';
+    const root = path.join(homeDir, '.letta');
 
     const plan = planInstallTargetScaffold({
       target: 'letta',
@@ -6353,12 +6415,29 @@ function runTests() {
       modules: [{ id: 'skills-core', paths: ['skills/ai/continuous-learning/SKILL.md'] }],
     });
 
-    assert.ok(!plan.operations.some(op => op.kind === 'merge-claude-settings-hooks'), 'no hook merge operation is planned');
-    assert.ok(
-      !plan.operations.some(op => op.destinationPath && /crusher|guardian/i.test(op.destinationPath)),
-      'no Guardian or Crusher script is planned'
+    const merges = plan.operations.filter(op => op.kind === 'merge-claude-settings-hooks');
+    assert.deepStrictEqual(
+      merges.map(op => [op.hookEvent, op.destinationPath, op.hookScriptPath, op.hookMatcher]).sort(),
+      [
+        ['SessionStart', path.join(root, 'settings.json'), path.join(root, 'scripts', 'hooks', 'letta-session-start.js'), undefined],
+        ['Stop', path.join(root, 'settings.json'), path.join(root, 'scripts', 'hooks', 'team-sync-stop.js'), undefined],
+      ],
+      'the two session hooks go into the user settings Letta reads, in the Claude Code format, with no matcher'
     );
-    assert.deepStrictEqual(plan.managedRoots, [path.resolve(homeDir, '.letta')], 'letta-home manages only its own root');
+    assert.ok(
+      !plan.operations.some(op => op.destinationPath && /guardian-validate|guardian-adapter|crusher-hook|crusher-rewrite/i.test(path.basename(op.destinationPath))),
+      'no Guardian or Crusher hook script is planned (the session marker under scripts/lib/crusher is part of the session runtime)'
+    );
+    const { SESSION_HOOK_LIB_SOURCES } = require('../../scripts/lib/claude-settings-hook-copy-operations');
+    for (const source of ['scripts/hooks/letta-session-start.js', 'scripts/hooks/team-sync-stop.js', ...SESSION_HOOK_LIB_SOURCES]) {
+      assert.ok(
+        plan.operations.some(op => normalizedRelativePath(op.sourceRelativePath) === source && op.destinationPath === path.join(root, ...source.split('/'))),
+        `${source} is copied with its path kept, so the requires resolve`
+      );
+    }
+    const destinations = plan.operations.filter(op => op.kind !== 'merge-claude-settings-hooks').map(op => op.destinationPath);
+    assert.strictEqual(new Set(destinations).size, destinations.length, 'no file is planned twice');
+    assert.deepStrictEqual(plan.managedRoots, [path.resolve(root)], 'letta-home manages only its own root');
   }));
 
   tally(test('letta-home warns when ~/.letta is absent, naming the tool and its docs (#1500)', () => {

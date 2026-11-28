@@ -24,7 +24,7 @@ const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 const REPO_ROOT = path.join(__dirname, '..', '..');
 const HOOKS = path.join(REPO_ROOT, 'scripts', 'hooks');
 const STOP = path.join(HOOKS, 'team-sync-stop.js');
-const HOSTS = ['qwen', 'codebuddy', 'junie', 'auggie', 'goose', 'droid', 'openhands', 'devin', 'kimi', 'vibe', 'crush'];
+const HOSTS = ['qwen', 'codebuddy', 'junie', 'auggie', 'goose', 'droid', 'openhands', 'devin', 'kimi', 'vibe', 'crush', 'grok', 'letta'];
 
 let passed = 0;
 let failed = 0;
@@ -135,6 +135,8 @@ const payloads = {
   kimi: { hook_event_name: 'SessionStart', session_id: 'kimi-1', session_title: 'demo', client_type: 'cli', cwd: project },
   vibe: { session_id: 'vibe-1', parent_session_id: null, transcript_path: '', cwd: project, hook_event_name: 'session_start', source: 'startup', agent_name: 'default', model: 'devstral' },
   crush: { event: 'SessionStart', hook_event_name: 'SessionStart', session_id: 'crush-1', cwd: project },
+  grok: { hookEventName: 'SessionStart', sessionId: 'grok-1', cwd: elsewhere, workspaceRoot: project },
+  letta: { event_type: 'SessionStart', working_directory: project },
 };
 // What a host puts in the environment instead of the payload: Devin names
 // no directory and exports the project.
@@ -161,6 +163,9 @@ try {
     assert.strictEqual(projectOf(payloads.auggie), project, 'Auggie: the first workspace root before cwd');
     assert.strictEqual(projectOf(payloads.goose), project, 'Goose: working_dir');
     assert.strictEqual(projectOf(payloads.qwen), project, 'Qwen: cwd');
+    assert.strictEqual(projectOf(payloads.grok), project, 'Grok: workspaceRoot before cwd');
+    assert.strictEqual(projectOf(payloads.letta), project, 'Letta: working_directory');
+    assert.strictEqual(sessionIdOf(payloads.letta), undefined, 'Letta names no session');
     assert.strictEqual(projectOf({}, {}), process.cwd(), 'nothing named: the working directory of the hook');
     assert.strictEqual(projectOf(payloads.devin, environments.devin), project, 'Devin: the project directory it exports');
     assert.strictEqual(projectOf({ cwd: project }, { DEVIN_PROJECT_DIR: elsewhere }), project, 'a directory in the payload comes before the environment');

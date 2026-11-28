@@ -10,6 +10,7 @@ const {
 } = require('./helpers');
 const {
   GROK_GUARDIAN_ADAPTER_SOURCE_RELATIVE_PATH,
+  GROK_SESSION_START_SOURCE_RELATIVE_PATH,
   resolveGrokGuardianAdapterDestination,
 } = require('../grok-hooks');
 
@@ -28,32 +29,46 @@ function relocateLibraryFolders(operations, targetRoot) {
   });
 }
 
-function createGrokGuardianOperations(adapter, targetRoot) {
+// The Guardian, then the session hooks: SessionStart (the Team Brain pull and
+// the session marker, through the Grok wrapper of the shared host session
+// start) and Stop (the push), each as a whole file EGC owns under hooks/,
+// with the runtime they load copied with its paths kept and the files the
+// Guardian already plants left to it.
+function createGrokHookOperations(adapter, targetRoot, plannedDestinations) {
   const {
     BASH_GUARDIAN_HOOK_MODULE_ID,
     createAdapterStdinJsonCopyOperation,
     createBashGuardianScriptCopyOperations,
     createGrokGuardianHookFileOperation,
+    createGrokSessionHookFileOperations,
+    createHostSessionHookCopyOperations,
     createWriteValidatorScriptCopyOperation,
   } = require('../claude-settings-hooks');
   const remap = (moduleId, sourceRelativePath, destinationPath, options) => (
     createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
   );
   const adapterDestination = resolveGrokGuardianAdapterDestination(targetRoot);
-  return [
+  const gates = [
     ...createBashGuardianScriptCopyOperations(remap, targetRoot),
     createWriteValidatorScriptCopyOperation(remap, targetRoot),
     createAdapterStdinJsonCopyOperation(remap, targetRoot),
     remap(BASH_GUARDIAN_HOOK_MODULE_ID, GROK_GUARDIAN_ADAPTER_SOURCE_RELATIVE_PATH, adapterDestination, { strategy: 'preserve-relative-path' }),
     createGrokGuardianHookFileOperation(targetRoot, adapterDestination),
   ];
+  const planned = new Set([...plannedDestinations, ...gates.map(operation => operation.destinationPath)]);
+  return [
+    ...gates,
+    ...createHostSessionHookCopyOperations(remap, targetRoot, GROK_SESSION_START_SOURCE_RELATIVE_PATH, planned),
+    ...createGrokSessionHookFileOperations(targetRoot),
+  ];
 }
 
 function planGrokOperations(input, adapter) {
   const targetRoot = adapter.resolveRoot(input ?? {});
+  const moduleOperations = relocateLibraryFolders(createFlatSkillPlanOperations(input, adapter), targetRoot);
   return [
-    ...relocateLibraryFolders(createFlatSkillPlanOperations(input, adapter), targetRoot),
-    ...createGrokGuardianOperations(adapter, targetRoot),
+    ...moduleOperations,
+    ...createGrokHookOperations(adapter, targetRoot, new Set(moduleOperations.map(operation => operation.destinationPath))),
   ];
 }
 
