@@ -22,7 +22,7 @@ const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 const REPO_ROOT = path.join(__dirname, '..', '..');
 const HOOKS = path.join(REPO_ROOT, 'scripts', 'hooks');
 const STOP = path.join(HOOKS, 'team-sync-stop.js');
-const HOSTS = ['qwen', 'codebuddy', 'junie', 'auggie', 'goose', 'droid', 'openhands'];
+const HOSTS = ['qwen', 'codebuddy', 'junie', 'auggie', 'goose', 'droid', 'openhands', 'grok', 'letta'];
 
 let passed = 0;
 let failed = 0;
@@ -129,6 +129,8 @@ const payloads = {
   goose: { event: 'SessionStart', session_id: 'goose-1', working_dir: project },
   droid: { session_id: 'droid-1', transcript_path: '', cwd: project, permission_mode: 'default', hook_event_name: 'SessionStart', source: 'startup' },
   openhands: { event_type: 'session_start', session_id: 'openhands-1', working_dir: project },
+  grok: { hookEventName: 'SessionStart', sessionId: 'grok-1', cwd: elsewhere, workspaceRoot: project },
+  letta: { event_type: 'SessionStart', working_directory: project },
 };
 
 try {
@@ -140,6 +142,9 @@ try {
     assert.strictEqual(projectOf(payloads.auggie), project, 'Auggie: the first workspace root before cwd');
     assert.strictEqual(projectOf(payloads.goose), project, 'Goose: working_dir');
     assert.strictEqual(projectOf(payloads.qwen), project, 'Qwen: cwd');
+    assert.strictEqual(projectOf(payloads.grok), project, 'Grok: workspaceRoot before cwd');
+    assert.strictEqual(projectOf(payloads.letta), project, 'Letta: working_directory');
+    assert.strictEqual(sessionIdOf(payloads.letta), undefined, 'Letta names no session');
     assert.strictEqual(projectOf({}), process.cwd(), 'nothing named: the working directory of the hook');
     assert.strictEqual(sessionIdOf(payloads.auggie), 'auggie-1', 'Auggie names the conversation');
     assert.strictEqual(sessionIdOf({ sessionId: 'camel' }), 'camel');

@@ -2,7 +2,8 @@
 
 // The SessionStart hook of the hosts that read the Claude Code hook format
 // and name their fields their own way (Qwen Code, CodeBuddy, Junie, Auggie,
-// Goose, Droid). The payload comes on stdin; the project is the root the host
+// Goose, Droid, OpenHands, Grok Build, Letta Code). The payload comes on
+// stdin; the project is the root the host
 // names, before its working directory, since the memory is keyed by project;
 // the shared session adapter pulls the Team Brain when the team asks for it,
 // restores the project memory and emits telemetry, as it does for Claude,
@@ -28,12 +29,13 @@ function firstString(...values) {
 }
 
 // The project: project_path (Junie), the first workspace root (Auggie),
-// then cwd (Qwen, CodeBuddy, Droid) or working_dir (Goose); a payload that
-// names nothing leaves the working directory of the hook, which a project
-// hook runs from.
+// workspaceRoot (Grok), then cwd (Qwen, CodeBuddy, Droid), working_dir
+// (Goose, OpenHands) or working_directory (Letta); a payload that names
+// nothing leaves the working directory of the hook, which a project hook runs
+// from.
 function projectOf(payload) {
   const roots = Array.isArray(payload.workspace_roots) ? payload.workspace_roots : [];
-  return firstString(payload.project_path, ...roots, payload.cwd, payload.working_dir) || process.cwd();
+  return firstString(payload.project_path, ...roots, payload.workspaceRoot, payload.cwd, payload.working_dir, payload.working_directory) || process.cwd();
 }
 
 // The session: session_id (most hosts), sessionId, or the conversation

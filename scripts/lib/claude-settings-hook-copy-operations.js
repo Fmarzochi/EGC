@@ -17,8 +17,11 @@ const {
 } = require('./kiro-v3-guardian-hooks');
 const {
   GROK_GUARDIAN_ADAPTER_SOURCE_RELATIVE_PATH,
+  GROK_SESSION_HOOK_FILES,
+  GROK_SESSION_START_SOURCE_RELATIVE_PATH,
   OPERATION_DISPATCH_TAG: GROK_GUARDIAN_HOOK_FILE_TAG,
   resolveGrokGuardianHookFilePath,
+  resolveGrokSessionHookFilePath,
 } = require('./grok-hooks');
 const {
   SESSION_START_EVENT,
@@ -245,6 +248,29 @@ function createGrokGuardianHookFileOperation(targetRoot, hookScriptPath) {
     hookEvent: GROK_GUARDIAN_HOOK_FILE_TAG,
     hookScriptPath,
   };
+}
+
+// The two session hooks of Grok Build, one owned file each under
+// <root>/hooks: SessionStart runs the Grok wrapper of the shared host session
+// start, Stop runs the shared team-sync-stop.js, both copied by
+// createHostSessionHookCopyOperations with their paths kept.
+function createGrokSessionHookFileOperations(targetRoot) {
+  const scripts = {
+    SessionStart: path.join(targetRoot, ...GROK_SESSION_START_SOURCE_RELATIVE_PATH.split('/')),
+    Stop: resolveTeamSyncStopHookScriptDestination(targetRoot),
+  };
+  const sources = { SessionStart: GROK_SESSION_START_SOURCE_RELATIVE_PATH, Stop: TEAM_SYNC_STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH };
+  return Object.entries(GROK_SESSION_HOOK_FILES).map(([event, file]) => ({
+    kind: HOOK_OPERATION_KIND,
+    moduleId: HOST_SESSION_HOOK_MODULE_ID,
+    sourceRelativePath: sources[event],
+    destinationPath: resolveGrokSessionHookFilePath(targetRoot, event),
+    strategy: HOOK_OPERATION_KIND,
+    ownership: 'managed',
+    scaffoldOnly: false,
+    hookEvent: file.tag,
+    hookScriptPath: scripts[event],
+  }));
 }
 
 function createKiroV3GuardianHookFileOperation(targetRoot, hookScriptPath) {
@@ -528,6 +554,7 @@ module.exports = {
   createMeshNoticeHookMergeOperationForDestination,
   createKiroMeshHookFileOperation,
   createGrokGuardianHookFileOperation,
+  createGrokSessionHookFileOperations,
   createKiroV3GuardianHookFileOperation,
   resolveMeshNoticeHookScriptDestination,
   createBashGuardianScriptCopyOperations,

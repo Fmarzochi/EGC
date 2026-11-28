@@ -45,11 +45,26 @@ const {
   removeKiroV3GuardianHookFromFile,
 } = require('./kiro-v3-guardian-hooks');
 const {
+  GROK_SESSION_HOOK_FILES,
   OPERATION_DISPATCH_TAG: GROK_GUARDIAN_HOOK_FILE_TAG,
   applyGrokGuardianHookToFile,
+  applyGrokSessionHookToFile,
   inspectGrokGuardianHookFile,
+  inspectGrokSessionHookFile,
   removeGrokGuardianHookFromFile,
+  removeGrokSessionHookFromFile,
 } = require('./grok-hooks');
+
+// One handler trio per owned session file of Grok Build (SessionStart, Stop),
+// keyed by the tag the operation carries, each writing the whole file for its
+// event.
+const GROK_SESSION_HOOK_OPERATION_HANDLERS = Object.fromEntries(
+  Object.entries(GROK_SESSION_HOOK_FILES).map(([event, file]) => [file.tag, {
+    apply: operation => applyGrokSessionHookToFile(operation.destinationPath, operation.hookScriptPath, event),
+    remove: operation => removeGrokSessionHookFromFile(operation.destinationPath),
+    inspect: operation => inspectGrokSessionHookFile(operation.destinationPath, operation.hookScriptPath, event),
+  }])
+);
 const {
   OPERATION_DISPATCH_TAG: AMAZONQ_OPERATION_DISPATCH_TAG,
   applyAmazonQGuardianHookToFile,
@@ -215,6 +230,7 @@ const HOOK_EVENT_OPERATION_HANDLERS = {
     remove: operation => removeGrokGuardianHookFromFile(operation.destinationPath),
     inspect: operation => inspectGrokGuardianHookFile(operation.destinationPath, operation.hookScriptPath),
   },
+  ...GROK_SESSION_HOOK_OPERATION_HANDLERS,
   [KIRO_V3_GUARDIAN_HOOK_FILE_TAG]: {
     apply: operation => applyKiroV3GuardianHookToFile(operation.destinationPath, operation.hookScriptPath),
     remove: operation => removeKiroV3GuardianHookFromFile(operation.destinationPath),
