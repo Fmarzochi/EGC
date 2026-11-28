@@ -374,6 +374,20 @@
     },
     {
       "adapter": "auggie-home",
+      "surface": "runtime",
+      "path": "~/.augment/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook entries run (the session hooks and what they load)."
+    },
+    {
+      "adapter": "auggie-home",
+      "surface": "hooks",
+      "path": "~/.augment/settings.json",
+      "status": "documented",
+      "source": "https://docs.augmentcode.com/cli/hooks"
+    },
+    {
+      "adapter": "auggie-home",
       "surface": "state",
       "path": "~/.augment/egc/install-state.json",
       "status": "egc",
@@ -556,6 +570,20 @@
       "path": "~/.agents/plugins/egc-guardian/scripts/",
       "status": "egc",
       "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
+    },
+    {
+      "adapter": "goose-home",
+      "surface": "hooks",
+      "path": "~/.agents/plugins/egc-session/hooks/hooks.json",
+      "status": "documented",
+      "source": "https://goose-docs.ai/docs/guides/context-engineering/hooks"
+    },
+    {
+      "adapter": "goose-home",
+      "surface": "runtime",
+      "path": "~/.agents/plugins/egc-session/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the session hooks of the egc-session plugin and what they load."
     },
     {
       "adapter": "goose-home",

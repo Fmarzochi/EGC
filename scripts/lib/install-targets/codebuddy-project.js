@@ -22,6 +22,8 @@ const {
   createCrusherScriptCopyOperations,
   createPreToolUseBashGuardianHookMergeOperation,
   createBashGuardianScriptCopyOperations,
+  createHostSessionHookOperations,
+  resolveSettingsPath,
 } = require('../claude-settings-hooks');
 
 // Unlike antigravity-project.js (whose SUPPORTED_SOURCE_PREFIXES excludes
@@ -173,6 +175,26 @@ function createHookOperations(adapter, targetRoot, modules) {
   ];
 }
 
+// The session hooks, in the same settings.json and the same format
+// ([CodeBuddy hooks](https://www.tencentcloud.com/document/product/1256/77296),
+// read on 2026-11-27): SessionStart gets session_id and cwd and reads
+// additionalContext and hookSpecificOutput back, so the project memory
+// reaches the session and the Team Brain is pulled when the team asks for
+// it; Stop pushes what changed.
+const CODEBUDDY_SESSION_START_SOURCE_RELATIVE_PATH = 'scripts/hooks/codebuddy-session-start.js';
+
+function createCodeBuddySessionOperations(adapter, targetRoot, plannedDestinations) {
+  return createHostSessionHookOperations({
+    createRemappedOperation: (moduleId, sourceRelativePath, destinationPath, options) => (
+      createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
+    ),
+    targetRoot,
+    hooksFilePath: resolveSettingsPath(targetRoot),
+    sessionStartSourceRelativePath: CODEBUDDY_SESSION_START_SOURCE_RELATIVE_PATH,
+    plannedDestinations,
+  });
+}
+
 const CONTEXT_FILE_NAME = 'AGENTS.md';
 const CONTEXT_RULE_FILE_NAME = 'egc-agents.md';
 
@@ -241,11 +263,14 @@ module.exports = createInstallTargetAdapter({
     });
 
     // Deterministic: every CodeBuddy install registers the GateGuard
-    // fact-forcing gate, even when no content modules are selected,
-    // mirroring Claude Code's always-on hook registration.
+    // fact-forcing gate and the session hooks, even when no content modules
+    // are selected, mirroring Claude Code's always-on hook registration.
+    const hookOperations = createHookOperations(adapter, targetRoot, modules);
+    const planned = new Set([...moduleOperations, ...hookOperations].map(operation => operation.destinationPath));
     return [
       ...moduleOperations,
-      ...createHookOperations(adapter, targetRoot, modules),
+      ...hookOperations,
+      ...createCodeBuddySessionOperations(adapter, targetRoot, planned),
     ];
   },
 });

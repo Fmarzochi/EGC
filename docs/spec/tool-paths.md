@@ -80,6 +80,8 @@ Status: **documented** paths are read by the tool per the linked source: its doc
 | commands | `~/.augment/commands/` | default | documented | <https://docs.augmentcode.com/cli/custom-commands> |  |
 | rules | `~/.augment/rules/` | default | documented | <https://docs.augmentcode.com/cli/rules> |  |
 | skills | `~/.augment/skills/` | default | documented | <https://docs.augmentcode.com/cli/skills> |  |
+| runtime | `~/.augment/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook entries run (the session hooks and what they load). |
+| hooks | `~/.augment/settings.json` | default | documented | <https://docs.augmentcode.com/cli/hooks> |  |
 | state | `~/.augment/egc/install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## auggie-project
@@ -126,6 +128,8 @@ Status: **documented** paths are read by the tool per the linked source: its doc
 | library | `~/.agents/commands/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | hooks | `~/.agents/plugins/egc-guardian/hooks/hooks.json` | default | documented | <https://goose-docs.ai/docs/guides/context-engineering/hooks> |  |
 | runtime | `~/.agents/plugins/egc-guardian/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| hooks | `~/.agents/plugins/egc-session/hooks/hooks.json` | default | documented | <https://goose-docs.ai/docs/guides/context-engineering/hooks> |  |
+| runtime | `~/.agents/plugins/egc-session/scripts/` | default | egc |  | EGC runtime: the session hooks of the egc-session plugin and what they load. |
 | library | `~/.agents/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | skills | `~/.agents/skills/` | default | documented | <https://goose-docs.ai/docs/guides/context-engineering/using-skills> |  |
 | state | `~/.agents/egc/goose-install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |

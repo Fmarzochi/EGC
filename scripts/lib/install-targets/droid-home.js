@@ -15,6 +15,13 @@ const LIBRARY_FAMILIES = new Set(['agents', 'rules']);
 const LIBRARY_ROOT_SEGMENTS = ['egc', 'library'];
 const SHELL_MATCHER = 'Execute';
 const WRITE_MATCHER = 'Edit|Create|ApplyPatch';
+// The session hooks, in the same settings.json and the same format ([Droid
+// hooks](https://docs.factory.com/reference/hooks-reference), read on
+// 2026-11-27): SessionStart gets session_id and cwd and reads
+// additionalContext back into the context, so the project memory reaches the
+// session and the Team Brain is pulled when the team asks for it; Stop pushes
+// what changed.
+const DROID_SESSION_START_SOURCE_RELATIVE_PATH = 'scripts/hooks/droid-session-start.js';
 
 function planDroidPath(adapter, module, sourceRelativePath, planningInput, targetRoot) {
   const normalizedPath = normalizeRelativePath(sourceRelativePath);
@@ -34,19 +41,30 @@ function createDroidHookOperations(adapter, targetRoot) {
     createCrusherScriptCopyOperations,
     createWriteValidatorHookMergeOperationForDestination,
     createWriteValidatorScriptCopyOperation,
+    createHostSessionHookOperations,
   } = require('../claude-settings-hooks');
   const remap = (moduleId, sourceRelativePath, destinationPath, options) => (
     createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
   );
   const settingsPath = path.join(targetRoot, 'settings.json');
   const hooksDir = path.join(targetRoot, 'scripts', 'hooks');
-  return [
+  const gates = [
     ...createBashGuardianScriptCopyOperations(remap, targetRoot),
     createBashGuardianHookMergeOperationForDestination(settingsPath, path.join(hooksDir, 'pre-bash-guardian-validate.js'), SHELL_MATCHER),
     createWriteValidatorScriptCopyOperation(remap, targetRoot),
     createWriteValidatorHookMergeOperationForDestination(settingsPath, path.join(hooksDir, 'pre-write-guardian-validate.js'), WRITE_MATCHER),
     ...createCrusherScriptCopyOperations(remap, targetRoot),
     createCrusherHookMergeOperationForDestination(settingsPath, path.join(hooksDir, 'crusher-hook.js'), SHELL_MATCHER),
+  ];
+  return [
+    ...gates,
+    ...createHostSessionHookOperations({
+      createRemappedOperation: remap,
+      targetRoot,
+      hooksFilePath: settingsPath,
+      sessionStartSourceRelativePath: DROID_SESSION_START_SOURCE_RELATIVE_PATH,
+      plannedDestinations: new Set(gates.map(operation => operation.destinationPath)),
+    }),
   ];
 }
 

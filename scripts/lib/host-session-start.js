@@ -1,0 +1,78 @@
+'use strict';
+
+// The SessionStart hook of the hosts that read the Claude Code hook format
+// and name their fields their own way (Qwen Code, CodeBuddy, Junie, Auggie,
+// Goose, Droid). The payload comes on stdin; the project is the root the host
+// names, before its working directory, since the memory is keyed by project;
+// the shared session adapter pulls the Team Brain when the team asks for it,
+// restores the project memory and emits telemetry, as it does for Claude,
+// OpenCode, Cursor and Copilot; and the answer goes out in both shapes the
+// hosts read, additionalContext at the top and under hookSpecificOutput. A
+// host that reads nothing from this hook (Junie, Auggie) still gets the pull.
+// Each host has a thin wrapper in scripts/hooks/<host>-session-start.js.
+
+const fs = require('node:fs');
+
+function readPayload() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(0, 'utf8'));
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+  } catch (_) { // NOSONAR: a missing or malformed payload restores the memory of the working directory
+    // fall through to the empty payload
+  }
+  return {};
+}
+
+function firstString(...values) {
+  return values.find(value => typeof value === 'string' && value.length > 0);
+}
+
+// The project: project_path (Junie), the first workspace root (Auggie),
+// then cwd (Qwen, CodeBuddy, Droid) or working_dir (Goose); a payload that
+// names nothing leaves the working directory of the hook, which a project
+// hook runs from.
+function projectOf(payload) {
+  const roots = Array.isArray(payload.workspace_roots) ? payload.workspace_roots : [];
+  return firstString(payload.project_path, ...roots, payload.cwd, payload.working_dir) || process.cwd();
+}
+
+// The session: session_id (most hosts), sessionId, or the conversation
+// (Auggie); undefined when the host names none.
+function sessionIdOf(payload) {
+  return firstString(payload.session_id, payload.sessionId, payload.conversation_id);
+}
+
+// The two shapes the hosts read: additionalContext at the top level (Droid,
+// OpenHands) and under hookSpecificOutput (Qwen, CodeBuddy, Claude readers).
+function sessionStartAnswer(context) {
+  return context
+    ? { additionalContext: context, hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: context } }
+    : {};
+}
+
+async function runHostSessionStart(host, payload = readPayload()) {
+  let restored = { host, context: '' };
+  try {
+    const { runSessionStartAdapter } = require('./session-start-adapter');
+    restored = await runSessionStartAdapter({
+      host,
+      input: { cwd: projectOf(payload), session_id: sessionIdOf(payload), hook_event_name: 'SessionStart' },
+    });
+  } catch (_) { // NOSONAR: never block a session startup
+    // Keep the empty fallback above.
+  }
+  return sessionStartAnswer(typeof restored.context === 'string' ? restored.context : '');
+}
+
+// The entry point of a wrapper: fail open, so a startup that cannot restore
+// the context still lets the session begin.
+function runHostSessionStartHook(host) {
+  runHostSessionStart(host)
+    .then(answer => process.stdout.write(JSON.stringify(answer)))
+    .catch(() => {
+      process.stdout.write('{}');
+      process.exit(0);
+    });
+}
+
+module.exports = { projectOf, readPayload, runHostSessionStart, runHostSessionStartHook, sessionIdOf, sessionStartAnswer };

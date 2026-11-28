@@ -11,6 +11,7 @@ const {
   createBashGuardianScriptCopyOperations,
   createCrusherHookMergeOperationForDestination,
   createCrusherScriptCopyOperations,
+  createHostSessionHookOperations,
 } = require('../claude-settings-hooks');
 
 // Junie CLI hooks ONLY work from the home-scope config by default --
@@ -88,6 +89,26 @@ function createJunieCrusherOperations(adapter, targetRoot) {
   ];
 }
 
+// The session hooks, in the same config.json and the same format
+// ([Junie CLI hooks](https://junie.jetbrains.com/docs/junie-cli-hooks.html),
+// read on 2026-11-27): SessionStart gets session_id, cwd and project_path and
+// reads nothing back, so the hook pulls the Team Brain when the team asks for
+// it and restores the memory of project_path, which the session reads
+// through get_state; Stop pushes what changed.
+const JUNIE_SESSION_START_SOURCE_RELATIVE_PATH = 'scripts/hooks/junie-session-start.js';
+
+function createJunieSessionOperations(adapter, targetRoot, plannedDestinations) {
+  return createHostSessionHookOperations({
+    createRemappedOperation: (moduleId, sourceRelativePath, destinationPath, options) => (
+      createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
+    ),
+    targetRoot,
+    hooksFilePath: resolveJunieConfigJsonPath(targetRoot),
+    sessionStartSourceRelativePath: JUNIE_SESSION_START_SOURCE_RELATIVE_PATH,
+    plannedDestinations,
+  });
+}
+
 module.exports = createInstallTargetAdapter({
   id: 'junie-home',
   target: 'junie',
@@ -98,10 +119,11 @@ module.exports = createInstallTargetAdapter({
   planOperations(input, adapter) {
     const planningInput = { repoRoot: input.repoRoot, projectRoot: input.projectRoot, homeDir: input.homeDir };
     const targetRoot = adapter.resolveRoot(planningInput);
-    return [
+    const planned = [
       ...createFlatSkillPlanOperations(input, adapter),
       ...createJunieGuardianOperations(adapter, targetRoot),
       ...createJunieCrusherOperations(adapter, targetRoot),
     ];
+    return [...planned, ...createJunieSessionOperations(adapter, targetRoot, new Set(planned.map(operation => operation.destinationPath)))];
   },
 });
