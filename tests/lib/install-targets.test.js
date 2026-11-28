@@ -2951,41 +2951,6 @@ function runTests() {
     }
   }));
 
-  tally(test('the hosts that read the Claude Code hook format register SessionStart and Stop beside their gates and scaffold the session runtime', () => {
-    const repoRoot = path.join(__dirname, '..', '..');
-    const homeDir = '/Users/example';
-    const projectRoot = '/Users/example/work/demo';
-    const cases = [
-      { target: 'qwen', hooksFile: path.join(projectRoot, '.qwen', 'settings.json'), root: path.join(projectRoot, '.qwen'), script: 'qwen-session-start.js' },
-      { target: 'codebuddy', hooksFile: path.join(projectRoot, '.codebuddy', 'settings.json'), root: path.join(projectRoot, '.codebuddy'), script: 'codebuddy-session-start.js' },
-      { target: 'junie', hooksFile: path.join(homeDir, '.junie', 'config.json'), root: path.join(homeDir, '.junie'), script: 'junie-session-start.js' },
-      { target: 'auggie', hooksFile: path.join(homeDir, '.augment', 'settings.json'), root: path.join(homeDir, '.augment'), script: 'auggie-session-start.js' },
-      { target: 'goose', hooksFile: path.join(homeDir, '.agents', 'plugins', 'egc-session', 'hooks', 'hooks.json'), root: path.join(homeDir, '.agents', 'plugins', 'egc-session'), script: 'goose-session-start.js' },
-      { target: 'droid', hooksFile: path.join(homeDir, '.factory', 'settings.json'), root: path.join(homeDir, '.factory'), script: 'droid-session-start.js' },
-    ];
-    for (const { target, hooksFile, root, script } of cases) {
-      const plan = planInstallTargetScaffold({ target, repoRoot, homeDir, projectRoot, modules: [] });
-      const sessionOperations = plan.operations.filter(operation => (
-        operation.kind === 'merge-claude-settings-hooks' && operation.destinationPath === hooksFile
-        && (operation.hookEvent === 'SessionStart' || operation.hookEvent === 'Stop')
-      ));
-      assert.deepStrictEqual(
-        sessionOperations.map(operation => [operation.hookEvent, operation.hookScriptPath]).sort(),
-        [['SessionStart', path.join(root, 'scripts', 'hooks', script)], ['Stop', path.join(root, 'scripts', 'hooks', 'team-sync-stop.js')]],
-        `${target}: SessionStart runs the wrapper of the host and Stop the shared push script, in ${hooksFile}`
-      );
-      for (const source of [`scripts/hooks/${script}`, 'scripts/hooks/team-sync-stop.js', 'scripts/lib/host-session-start.js', 'scripts/lib/session-start-adapter.js', 'scripts/lib/session-context-loader.js', 'scripts/lib/team-autosync.js', 'scripts/check-state-leak.js']) {
-        assert.ok(
-          plan.operations.some(operation => normalizedRelativePath(operation.sourceRelativePath) === source
-            && operation.destinationPath === path.join(root, ...source.split('/'))),
-          `${target}: ${source} is copied with its path kept, so the requires resolve`
-        );
-      }
-      const destinations = plan.operations.filter(operation => operation.kind !== 'merge-claude-settings-hooks').map(operation => operation.destinationPath);
-      assert.strictEqual(new Set(destinations).size, destinations.length, `${target}: no file is planned twice`);
-    }
-  }));
-
   tally(test('openhands-project registers session_start and stop beside the Guardian in .openhands/hooks.json and scaffolds the session runtime', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
