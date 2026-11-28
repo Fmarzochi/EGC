@@ -1958,7 +1958,7 @@
       "path": "~/.grok/hooks/egc-stop.json",
       "status": "documented",
       "source": "https://docs.x.ai/build/features/hooks",
-      "note": "The Stop hook, a passive event (read on 2026-11-28): pushes the Team Brain after a response that changed a state document. EGC owns this whole file."
+      "note": "The Stop hook, a passive event (read on 2026-11-28): pushes the Team Brain after the response, whatever is new on its first run, with no record yet, then only when a state document changed since the last run. EGC owns this whole file."
     },
     {
       "adapter": "grok-home",
@@ -2037,7 +2037,7 @@
       "path": "$GROK_HOME/hooks/egc-stop.json",
       "status": "documented",
       "source": "https://docs.x.ai/build/features/hooks",
-      "note": "The Stop hook, a passive event (read on 2026-11-28): pushes the Team Brain after a response that changed a state document. EGC owns this whole file.",
+      "note": "The Stop hook, a passive event (read on 2026-11-28): pushes the Team Brain after the response, whatever is new on its first run, with no record yet, then only when a state document changed since the last run. EGC owns this whole file.",
       "variant": "GROK_HOME"
     },
     {
@@ -2613,7 +2613,7 @@
       "path": "~/.letta/settings.json",
       "status": "documented",
       "source": "https://docs.letta.com/letta-code/hooks",
-      "note": "User-level hooks in the Claude Code format, merged with the project ones (read on 2026-11-28): EGC adds SessionStart (the Team Brain pull when the team asks for it; event_type and working_directory on stdin) and Stop (the push after a response that changed a state document), with no matcher. The rest of the file is the person's."
+      "note": "User-level hooks in the Claude Code format, merged with the project ones (read on 2026-11-28): EGC adds SessionStart (the Team Brain pull when the team asks for it; event_type and working_directory on stdin) and Stop (the push after the response: whatever is new on its first run, then only when a state document changed since the last run), with no matcher. The rest of the file is the person's."
     },
     {
       "adapter": "letta-home",

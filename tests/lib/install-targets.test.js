@@ -5809,8 +5809,12 @@ function runTests() {
         ],
         'the two session hooks are whole files EGC owns beside the Guardian one, each naming its script under the root'
       );
-      for (const source of ['scripts/hooks/grok-session-start.js', 'scripts/hooks/team-sync-stop.js', 'scripts/lib/host-session-start.js', 'scripts/lib/session-start-adapter.js', 'scripts/lib/team-autosync.js']) {
-        assert.ok(destinations.includes(path.join(root, ...source.split('/'))), `${source} is copied with its path kept`);
+      const { SESSION_HOOK_LIB_SOURCES } = require('../../scripts/lib/claude-settings-hook-copy-operations');
+      for (const source of ['scripts/hooks/grok-session-start.js', 'scripts/hooks/team-sync-stop.js', ...SESSION_HOOK_LIB_SOURCES]) {
+        assert.ok(
+          plan.operations.some(op => normalizedRelativePath(op.sourceRelativePath) === source && op.destinationPath === path.join(root, ...source.split('/'))),
+          `${source} is copied with its path kept, by the Guardian or by the session hooks, so the requires resolve`
+        );
       }
       assert.strictEqual(new Set(destinations).size, destinations.length, 'no file is planned twice: the session runtime leaves to the Guardian what it already plants');
       assert.deepStrictEqual(plan.managedRoots, [path.resolve(root)], 'grok-home manages only its own root');
@@ -6376,7 +6380,8 @@ function runTests() {
       !plan.operations.some(op => op.destinationPath && /guardian-validate|guardian-adapter|crusher-hook|crusher-rewrite/i.test(path.basename(op.destinationPath))),
       'no Guardian or Crusher hook script is planned (the session marker under scripts/lib/crusher is part of the session runtime)'
     );
-    for (const source of ['scripts/hooks/letta-session-start.js', 'scripts/hooks/team-sync-stop.js', 'scripts/lib/host-session-start.js', 'scripts/lib/session-start-adapter.js', 'scripts/lib/team-autosync.js', 'scripts/check-state-leak.js']) {
+    const { SESSION_HOOK_LIB_SOURCES } = require('../../scripts/lib/claude-settings-hook-copy-operations');
+    for (const source of ['scripts/hooks/letta-session-start.js', 'scripts/hooks/team-sync-stop.js', ...SESSION_HOOK_LIB_SOURCES]) {
       assert.ok(
         plan.operations.some(op => normalizedRelativePath(op.sourceRelativePath) === source && op.destinationPath === path.join(root, ...source.split('/'))),
         `${source} is copied with its path kept, so the requires resolve`
