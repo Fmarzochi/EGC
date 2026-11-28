@@ -13,6 +13,7 @@ import { loadOrCreateKey as loadOrCreateIntegrityKey, writeHmac } from '../integ
 import { branchStateKey, projectIdentity, projectSlug } from '../branch-state';
 import { TEAM_MARKER_FILE, generateTeamKey, markerMatches, openEnvelope, parseTeamKey, sealEnvelope, teamKeyMarker } from './envelope';
 import { canonicalForm, mergeStateDocuments } from './merge-sections';
+import { ACL_WARNING, makePrivate } from './private-path';
 import { globalStateFilePath } from '../global-state';
 import { resolveHome } from '../home';
 
@@ -109,25 +110,26 @@ export function getTeamConfig(): SyncConfig | null {
   }
 }
 
-// The config carries the team key, so it is private to the user.
-export function writeTeamConfig(config: SyncConfig): void {
+// The config carries the team key, so it is private to the user: the POSIX
+// mode where modes exist, an ACL for the user alone on Windows. Answers
+// whether the file and its directory ended private; on Windows a protection
+// that failed is also said on stderr, the log channel of the server, since
+// the write itself goes on.
+export function writeTeamConfig(config: SyncConfig): boolean {
   const egcDir = path.join(resolveHome(), '.egc');
   fs.mkdirSync(egcDir, { recursive: true, mode: 0o700 });
-  try {
-    fs.chmodSync(egcDir, 0o700);
-  } catch {
-    // modes are not supported on this filesystem
-  }
+  const privateDir = makePrivate(egcDir, 0o700, { directory: true });
   // Written next to its place and renamed over it, so an interrupted write
   // never leaves a truncated config that would look like a missing team.
   const temporary = `${TEAM_CONFIG_PATH}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-  fs.writeFileSync(temporary, JSON.stringify(config, null, 2), { encoding: 'utf-8', mode: 0o600 });
-  try {
-    fs.chmodSync(temporary, 0o600);
-  } catch {
-    // modes are not supported on this filesystem
-  }
+  // Created exclusively, so a path someone planted there is refused instead
+  // of reused with whatever list it carries.
+  fs.writeFileSync(temporary, JSON.stringify(config, null, 2), { encoding: 'utf-8', mode: 0o600, flag: 'wx' });
+  const privateFile = makePrivate(temporary, 0o600);
   fs.renameSync(temporary, TEAM_CONFIG_PATH);
+  const isPrivate = privateDir && privateFile;
+  if (!isPrivate && process.platform === 'win32') process.stderr.write(`${ACL_WARNING}\n`);
+  return isPrivate;
 }
 
 export async function teamInit(backend: string, remote: string, branch: string = 'main', teamKey?: string): Promise<SyncConfig> {
