@@ -67,6 +67,9 @@ const results = [
     assert.ok(calls.every(call => call[2].timeout === ACL_TIMEOUT_MS), 'the reset and the grants alike are bounded');
     let attempts = 0;
     assert.strictEqual(makePrivate('C:\\x', 0o700, { platform: 'win32', directory: true, env, run: () => ({ status: attempts++ === 0 ? 0 : 5 }) }), false, 'a grant refused after the reset');
+    let resetCalls = 0;
+    assert.strictEqual(makePrivate('C:\\x', 0o700, { platform: 'win32', directory: true, env, run: () => ({ status: ++resetCalls === 1 ? 5 : 0 }) }), false, 'a refused reset');
+    assert.strictEqual(resetCalls, 1, 'a refused reset stops there');
     assert.strictEqual(makePrivate('C:\\x\\team.json', 0o600, { platform: 'win32', env, run: () => ({ status: 5 }) }), false, 'a refused grant');
     assert.strictEqual(makePrivate('C:\\x\\team.json', 0o600, { platform: 'win32', env, run: () => { throw new Error('no icacls'); } }), false, 'a missing icacls');
   }),

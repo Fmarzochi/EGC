@@ -122,7 +122,9 @@ export function writeTeamConfig(config: SyncConfig): boolean {
   // Written next to its place and renamed over it, so an interrupted write
   // never leaves a truncated config that would look like a missing team.
   const temporary = `${TEAM_CONFIG_PATH}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-  fs.writeFileSync(temporary, JSON.stringify(config, null, 2), { encoding: 'utf-8', mode: 0o600 });
+  // Created exclusively, so a path someone planted there is refused instead
+  // of reused with whatever list it carries.
+  fs.writeFileSync(temporary, JSON.stringify(config, null, 2), { encoding: 'utf-8', mode: 0o600, flag: 'wx' });
   const privateFile = makePrivate(temporary, 0o600);
   fs.renameSync(temporary, TEAM_CONFIG_PATH);
   const isPrivate = privateDir && privateFile;

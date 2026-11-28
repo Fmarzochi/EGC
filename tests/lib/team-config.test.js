@@ -104,6 +104,10 @@ function runTests() {
       let attempts = 0;
       const refuseSecond = () => ({ status: attempts++ === 0 ? 0 : 5 });
       assert.strictEqual(makePrivate('C:\\x', 0o700, { platform: 'win32', directory: true, run: refuseSecond }), false, 'a grant refused after the reset is reported, not thrown');
+      const resetCalls = [];
+      const refuseFirst = (command, args) => { resetCalls.push(args); return { status: resetCalls.length === 1 ? 5 : 0 }; };
+      assert.strictEqual(makePrivate('C:\\x', 0o700, { platform: 'win32', directory: true, run: refuseFirst }), false, 'a refused reset is reported, not thrown');
+      assert.strictEqual(resetCalls.length, 1, 'a refused reset stops there, the grant does not run on a list that still holds the old entries');
       assert.strictEqual(makePrivate('C:\\x\\team.json', 0o600, { platform: 'win32', run: () => ({ status: 5 }) }), false, 'a refused grant is reported, not thrown');
       assert.strictEqual(makePrivate('C:\\x\\team.json', 0o600, { platform: 'win32', run: () => { throw new Error('no icacls'); } }), false, 'a missing icacls is reported, not thrown');
     }),
