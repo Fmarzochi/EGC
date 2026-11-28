@@ -117,6 +117,55 @@ function resolveKimiCodeHome(homeDir) {
   return path.join(homeDir, '.kimi-code');
 }
 
+// CodeBuddy Code reads its user-level MCP servers from the first existing of
+// ~/.codebuddy/.mcp.json (the documented name), ~/.codebuddy/mcp.json
+// (deprecated) and ~/.codebuddy.json (the legacy settings file), writes to
+// the first that exists and creates the documented name when none does
+// (codebuddy.ai/docs/cli/mcp, read on 2026-11-28). The shape is the standard
+// mcpServers object; the type is inferred from command when absent.
+const CODEBUDDY_MCP_CANDIDATES = [['.codebuddy', '.mcp.json'], ['.codebuddy', 'mcp.json'], ['.codebuddy.json']];
+
+function resolveCodeBuddyMcpPath(homeDir) {
+  const candidates = CODEBUDDY_MCP_CANDIDATES.map(segments => path.join(homeDir, ...segments));
+  return candidates.find(candidate => fs.existsSync(candidate)) || candidates[0];
+}
+
+// A CodeBuddy install shows as its config directory, as any of the three
+// files it reads (the legacy ~/.codebuddy.json lives outside the directory),
+// or as the binary on PATH.
+function codeBuddyInstalled(homeDir) {
+  return fs.existsSync(path.join(homeDir, '.codebuddy'))
+    || fs.existsSync(resolveCodeBuddyMcpPath(homeDir))
+    || commandExists('codebuddy');
+}
+
+// The Cline CLI reads its MCP servers from
+// ~/.cline/data/settings/cline_mcp_settings.json, or from the file that
+// CLINE_MCP_SETTINGS_PATH names, a leading tilde expanded to the home
+// (docs.cline.bot/mcp/configuring-mcp-servers, read on 2026-11-28), in the
+// standard mcpServers shape with disabled and autoApprove beside command,
+// args and env. The VS Code extension keeps the same JSON in the editor's
+// own storage, at a path the docs do not name, so that file is not written.
+function resolveClineMcpSettingsPath(homeDir) {
+  const configured = process.env.CLINE_MCP_SETTINGS_PATH;
+  if (configured) {
+    if (configured === '~' || configured.startsWith('~/')) return path.join(homeDir, configured.slice(1));
+    return path.resolve(configured);
+  }
+  return path.join(homeDir, '.cline', 'data', 'settings', 'cline_mcp_settings.json');
+}
+
+// A Cline CLI install shows as its data root, as the settings file the
+// variable moved (or the directory that holds it), or as the binary on PATH.
+function clineInstalled(homeDir) {
+  if (fs.existsSync(path.join(homeDir, '.cline'))) return true;
+  if (process.env.CLINE_MCP_SETTINGS_PATH) {
+    const moved = resolveClineMcpSettingsPath(homeDir);
+    if (fs.existsSync(moved) || fs.existsSync(path.dirname(moved))) return true;
+  }
+  return commandExists('cline');
+}
+
 function buildMcpRegistrationTargets(homeDir) {
   return [
     {
@@ -329,6 +378,23 @@ function buildMcpRegistrationTargets(homeDir) {
       gate: () => fs.existsSync(path.join(homeDir, '.config', 'amp')) || fs.existsSync(path.join(homeDir, '.amp')) || commandExists('amp'),
       format: 'amp-settings',
     },
+    {
+      // See resolveCodeBuddyMcpPath and codeBuddyInstalled above.
+      name: 'CodeBuddy',
+      path: resolveCodeBuddyMcpPath(homeDir),
+      gate: () => codeBuddyInstalled(homeDir),
+      format: 'json',
+    },
+    {
+      // See resolveClineMcpSettingsPath and clineInstalled above; a settings
+      // path moved by CLINE_MCP_SETTINGS_PATH is allowed to land in its own
+      // directory.
+      name: 'Cline CLI',
+      path: resolveClineMcpSettingsPath(homeDir),
+      gate: () => clineInstalled(homeDir),
+      allowedRoot: process.env.CLINE_MCP_SETTINGS_PATH ? path.dirname(resolveClineMcpSettingsPath(homeDir)) : undefined,
+      format: 'json',
+    },
   ];
 }
 
@@ -338,4 +404,6 @@ module.exports = {
   openCodeConfigPath,
   registerOpenCodeInstructions,
   buildMcpRegistrationTargets,
+  resolveClineMcpSettingsPath,
+  resolveCodeBuddyMcpPath,
 };
