@@ -478,12 +478,12 @@ function isPlannedDestination(plannedDestinations, destinationPath) {
   return false;
 }
 
-// The copies of the session hooks and what they load, under targetRoot; a
+// The copies of the given sources with their paths kept under targetRoot; a
 // destination the target already plans (the gates share several of these
 // files, and a module may copy a whole folder) is left to that plan, so no
 // file is planned twice.
-function createHostSessionHookCopyOperations(createRemappedOperation, targetRoot, sessionStartSourceRelativePath, plannedDestinations = new Set()) {
-  return [sessionStartSourceRelativePath, TEAM_SYNC_STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH, ...SESSION_HOOK_LIB_SOURCES]
+function copyWithPathsKept(createRemappedOperation, targetRoot, sources, plannedDestinations) {
+  return sources
     .map(sourceRelativePath => createRemappedOperation(
       HOST_SESSION_HOOK_MODULE_ID,
       sourceRelativePath,
@@ -491,6 +491,23 @@ function createHostSessionHookCopyOperations(createRemappedOperation, targetRoot
       { strategy: 'preserve-relative-path' }
     ))
     .filter(operation => !isPlannedDestination(plannedDestinations, operation.destinationPath));
+}
+
+// The runtime the session work loads, alone: for a host whose session work
+// runs in its own process over the installed scripts (pi's extension) and
+// needs no wrapper and no stop script.
+function createSessionRuntimeCopyOperations(createRemappedOperation, targetRoot, plannedDestinations = new Set()) {
+  return copyWithPathsKept(createRemappedOperation, targetRoot, SESSION_HOOK_LIB_SOURCES, plannedDestinations);
+}
+
+// The copies of the session hooks and what they load, under targetRoot.
+function createHostSessionHookCopyOperations(createRemappedOperation, targetRoot, sessionStartSourceRelativePath, plannedDestinations = new Set()) {
+  return copyWithPathsKept(
+    createRemappedOperation,
+    targetRoot,
+    [sessionStartSourceRelativePath, TEAM_SYNC_STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH, ...SESSION_HOOK_LIB_SOURCES],
+    plannedDestinations
+  );
 }
 
 function createSessionStartHookMergeOperationForDestination(destinationPath, hookScriptPath, sourceRelativePath) {
@@ -539,6 +556,7 @@ module.exports = {
   TEAM_SYNC_STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   createHostSessionHookCopyOperations,
   createHostSessionHookOperations,
+  createSessionRuntimeCopyOperations,
   createSessionStartHookMergeOperationForDestination,
   createStopHookMergeOperationForDestination,
   resolveTeamSyncStopHookScriptDestination,
