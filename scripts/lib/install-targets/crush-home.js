@@ -10,11 +10,14 @@ const {
 } = require('./helpers');
 const {
   createCrusherScriptCopyOperations,
+  createHostSessionHookCopyOperations,
 } = require('../claude-settings-hooks');
 const {
+  CRUSH_SESSION_START_SCRIPT_SOURCE_RELATIVE_PATH,
   createCrushCrusherHookMergeOperation,
   createCrushGuardianHookMergeOperation,
   createCrushGuardianScriptCopyOperations,
+  createCrushSessionHookMergeOperations,
 } = require('../crush-settings-hooks');
 
 /**
@@ -51,21 +54,34 @@ function resolveCrushConfigPath(input = {}) {
 }
 
 /**
- * Creates file copy and hook merge operations for Crush installation.
+ * Creates file copy and hook merge operations for Crush installation: the
+ * Guardian and the Token Crusher with their PreToolUse entries, then the
+ * session hooks ([Crush hooks](https://github.com/charmbracelet/crush/blob/main/docs/hooks/README.md),
+ * read on 2026-11-28: SessionStart gets session_id and cwd and reads
+ * nothing back, TurnEnd runs after each response) with the wrapper, the
+ * push and what they load copied under the config directory, the files the
+ * gates already plant left to them, and their two entries.
  * @param {object} adapter
  * @param {string} targetRoot
+ * @param {Set<string>} plannedDestinations
  * @returns {Array<object>}
  */
-function createCrushOperations(adapter, targetRoot) {
+function createCrushOperations(adapter, targetRoot, plannedDestinations) {
   const remap = (moduleId, sourceRelativePath, destinationPath, options) => (
     createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
   );
 
-  return [
+  const gates = [
     ...createCrushGuardianScriptCopyOperations(remap, targetRoot),
     ...createCrusherScriptCopyOperations(remap, targetRoot),
     createCrushGuardianHookMergeOperation(targetRoot),
     createCrushCrusherHookMergeOperation(targetRoot),
+  ];
+  const planned = new Set([...plannedDestinations, ...gates.map(operation => operation.destinationPath)]);
+  return [
+    ...gates,
+    ...createHostSessionHookCopyOperations(remap, targetRoot, CRUSH_SESSION_START_SCRIPT_SOURCE_RELATIVE_PATH, planned),
+    ...createCrushSessionHookMergeOperations(targetRoot),
   ];
 }
 
@@ -111,7 +127,7 @@ const baseAdapter = createInstallTargetAdapter({
 
     return [
       ...moduleOperations,
-      ...createCrushOperations(adapter, adapter.resolveRoot(input)),
+      ...createCrushOperations(adapter, adapter.resolveRoot(input), new Set(moduleOperations.map(operation => operation.destinationPath))),
     ];
   },
 });

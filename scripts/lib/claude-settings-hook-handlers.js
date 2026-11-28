@@ -107,18 +107,22 @@ const {
   removeRoocodeDenylistFromFile,
 } = require('./vscode-denied-commands');
 const {
+  CRUSH_HOOK_OPERATION_HANDLERS,
   CRUSH_PRE_TOOL_USE_EVENT,
-  applyCrushHookToFile,
-  inspectCrushHookFile,
-  removeCrushHookFromFile,
+  CRUSH_SESSION_START_EVENT,
+  CRUSH_TURN_END_EVENT,
 } = require('./crush-settings-hooks');
 const {
   KIMI_HOOK_OPERATION_HANDLERS,
   KIMI_PRE_TOOL_EVENT,
+  KIMI_SESSION_START_EVENT,
+  KIMI_STOP_EVENT,
 } = require('./kimi-hooks-toml');
 const {
   VIBE_HOOK_OPERATION_HANDLERS,
+  VIBE_POST_AGENT_EVENT,
   VIBE_PRE_TOOL_EVENT,
+  VIBE_SESSION_START_EVENT,
 } = require('./vibe-hooks-toml');
 const {
   STOP_EVENT,
@@ -299,17 +303,21 @@ const HOOK_EVENT_OPERATION_HANDLERS = {
     remove: operation => removeRoocodeDenylistFromFile(operation.destinationPath),
     inspect: operation => inspectRoocodeDenylistFile(operation.destinationPath),
   },
-  [CRUSH_PRE_TOOL_USE_EVENT]: {
-    apply: operation => applyCrushHookToFile(operation.destinationPath, operation.hookScriptPath, operation.hookMatcher),
-    remove: operation => removeCrushHookFromFile(operation.destinationPath, operation.hookScriptPath),
-    inspect: operation => inspectCrushHookFile(operation.destinationPath, operation.hookScriptPath, operation.hookMatcher),
-  },
+  // Crush: flat entries in crush.json, under the event the operation names
+  // behind its crush: prefix (scripts/lib/crush-settings-hooks.js).
+  [CRUSH_PRE_TOOL_USE_EVENT]: CRUSH_HOOK_OPERATION_HANDLERS,
+  [CRUSH_SESSION_START_EVENT]: CRUSH_HOOK_OPERATION_HANDLERS,
+  [CRUSH_TURN_END_EVENT]: CRUSH_HOOK_OPERATION_HANDLERS,
   // Mistral Vibe: [[hooks]] tables in hooks.toml, by hook name
   // (scripts/lib/vibe-hooks-toml.js).
   [VIBE_PRE_TOOL_EVENT]: VIBE_HOOK_OPERATION_HANDLERS,
-  // Kimi Code CLI: a [[hooks]] table in config.toml, by the adapter its
+  [VIBE_SESSION_START_EVENT]: VIBE_HOOK_OPERATION_HANDLERS,
+  [VIBE_POST_AGENT_EVENT]: VIBE_HOOK_OPERATION_HANDLERS,
+  // Kimi Code CLI: [[hooks]] tables in config.toml, by the EGC script each
   // command runs (scripts/lib/kimi-hooks-toml.js).
   [KIMI_PRE_TOOL_EVENT]: KIMI_HOOK_OPERATION_HANDLERS,
+  [KIMI_SESSION_START_EVENT]: KIMI_HOOK_OPERATION_HANDLERS,
+  [KIMI_STOP_EVENT]: KIMI_HOOK_OPERATION_HANDLERS,
 };
 
 const SESSION_START_HOOK_OPERATION_HANDLERS = {

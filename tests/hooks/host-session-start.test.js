@@ -1,13 +1,15 @@
 /**
- * The session hooks of the hosts that read the Claude Code hook format and
- * name their fields their own way: scripts/lib/host-session-start.js takes
- * the project from project_path, the workspace roots, cwd or working_dir and
- * the session from session_id, sessionId or conversation_id, pulls the Team
- * Brain when the team asks for it, restores the project memory and answers
- * it as additionalContext at the top and under hookSpecificOutput; each host
- * has a wrapper in scripts/hooks (Qwen Code, CodeBuddy, Junie, Auggie, Goose,
- * Droid); and scripts/hooks/team-sync-stop.js pushes after a response that
- * changed the state. Runs against a home of its own.
+ * The session hooks of the hosts that name their fields their own way:
+ * scripts/lib/host-session-start.js takes the project from project_path, the
+ * workspace roots, cwd or working_dir, then from the directory the host
+ * exports (DEVIN_PROJECT_DIR), and the session from session_id, sessionId or
+ * conversation_id, pulls the Team Brain when the team asks for it, restores
+ * the project memory and answers it in the shape the host reads
+ * (additionalContext at the top and under hookSpecificOutput, or Vibe's
+ * snake_case); each host has a wrapper in scripts/hooks (Qwen Code,
+ * CodeBuddy, Junie, Auggie, Goose, Droid, OpenHands, Devin, Kimi Code,
+ * Mistral Vibe, Crush); and scripts/hooks/team-sync-stop.js pushes after a
+ * response that changed the state. Runs against a home of its own.
  */
 'use strict';
 
@@ -22,7 +24,7 @@ const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 const REPO_ROOT = path.join(__dirname, '..', '..');
 const HOOKS = path.join(REPO_ROOT, 'scripts', 'hooks');
 const STOP = path.join(HOOKS, 'team-sync-stop.js');
-const HOSTS = ['qwen', 'codebuddy', 'junie', 'auggie', 'goose', 'droid', 'openhands', 'grok', 'letta'];
+const HOSTS = ['qwen', 'codebuddy', 'junie', 'auggie', 'goose', 'droid', 'openhands', 'devin', 'kimi', 'vibe', 'crush', 'grok', 'letta'];
 
 let passed = 0;
 let failed = 0;
@@ -129,9 +131,28 @@ const payloads = {
   goose: { event: 'SessionStart', session_id: 'goose-1', working_dir: project },
   droid: { session_id: 'droid-1', transcript_path: '', cwd: project, permission_mode: 'default', hook_event_name: 'SessionStart', source: 'startup' },
   openhands: { event_type: 'session_start', session_id: 'openhands-1', working_dir: project },
+  devin: { hook_event_name: 'SessionStart', session_id: 'devin-1', source: 'startup' },
+  kimi: { hook_event_name: 'SessionStart', session_id: 'kimi-1', session_title: 'demo', client_type: 'cli', cwd: project },
+  vibe: { session_id: 'vibe-1', parent_session_id: null, transcript_path: '', cwd: project, hook_event_name: 'session_start', source: 'startup', agent_name: 'default', model: 'devstral' },
+  crush: { event: 'SessionStart', hook_event_name: 'SessionStart', session_id: 'crush-1', cwd: project },
   grok: { hookEventName: 'SessionStart', sessionId: 'grok-1', cwd: elsewhere, workspaceRoot: project },
   letta: { event_type: 'SessionStart', working_directory: project },
 };
+// What a host puts in the environment instead of the payload: Devin names
+// no directory and exports the project.
+const environments = {
+  devin: { DEVIN_PROJECT_DIR: project },
+};
+// The context the hook answers, in the shape of the host's contract. The
+// hook cannot know what the host does with it: Junie, Auggie, Kimi Code and
+// Crush discard the output of their session-start event, so the answer is
+// still checked here (the pull and the restore ran, and the hook never
+// blocks the session), and those sessions read the memory through
+// get_state, which the memory server's own tests cover.
+function restoredContext(host, output) {
+  if (host === 'vibe') return output.hook_specific_output && output.hook_specific_output.additional_context;
+  return output.additionalContext;
+}
 
 try {
   console.log('\n=== Testing the session hooks of the hosts in the Claude Code hook format ===\n');
@@ -145,25 +166,36 @@ try {
     assert.strictEqual(projectOf(payloads.grok), project, 'Grok: workspaceRoot before cwd');
     assert.strictEqual(projectOf(payloads.letta), project, 'Letta: working_directory');
     assert.strictEqual(sessionIdOf(payloads.letta), undefined, 'Letta names no session');
-    assert.strictEqual(projectOf({}), process.cwd(), 'nothing named: the working directory of the hook');
+    assert.strictEqual(projectOf({}, {}), process.cwd(), 'nothing named: the working directory of the hook');
+    assert.strictEqual(projectOf(payloads.devin, environments.devin), project, 'Devin: the project directory it exports');
+    assert.strictEqual(projectOf({ cwd: project }, { DEVIN_PROJECT_DIR: elsewhere }), project, 'a directory in the payload comes before the environment');
     assert.strictEqual(sessionIdOf(payloads.auggie), 'auggie-1', 'Auggie names the conversation');
     assert.strictEqual(sessionIdOf({ sessionId: 'camel' }), 'camel');
     assert.strictEqual(sessionIdOf({}), undefined);
     assert.deepStrictEqual(sessionStartAnswer(''), {});
+    assert.deepStrictEqual(sessionStartAnswer('', 'vibe'), {});
     assert.deepStrictEqual(sessionStartAnswer('memory'), { additionalContext: 'memory', hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: 'memory' } });
+    assert.deepStrictEqual(sessionStartAnswer('memory', 'kimi'), sessionStartAnswer('memory'), 'a host with no shape of its own gets the Claude Code one');
+    assert.deepStrictEqual(sessionStartAnswer('memory', 'vibe'), { hook_specific_output: { additional_context: 'memory' } }, 'Vibe reads snake_case');
   });
 
   for (const host of HOSTS) {
-    test(`${host}: SessionStart answers the project memory in both shapes for the project the host names`, () => {
+    test(`${host}: the session-start hook answers the project memory in the shape the host reads, for the project the host names`, () => {
       fs.writeFileSync(stateFile, `# Project State\n- ${host} resumes feature Z\n`);
-      const result = runHook(path.join(HOOKS, `${host}-session-start.js`), home, payloads[host]);
+      const result = runHook(path.join(HOOKS, `${host}-session-start.js`), home, payloads[host], environments[host]);
       assert.strictEqual(result.code, 0, result.stderr);
+      assert.strictEqual(result.stderr, '', 'the hook never writes to stderr, so a host that reads it sees nothing to block on');
       const output = parseJson(result.stdout);
       assert.ok(output, `the hook answers JSON, got: ${result.stdout.slice(0, 200)}`);
-      assert.ok(output.additionalContext.includes('EGC persistent memory'), 'the memory preamble is there');
-      assert.ok(output.additionalContext.includes(`${host} resumes feature Z`), 'the state file is there');
-      assert.strictEqual(output.hookSpecificOutput.hookEventName, 'SessionStart');
-      assert.strictEqual(output.hookSpecificOutput.additionalContext, output.additionalContext);
+      const context = restoredContext(host, output);
+      assert.ok(typeof context === 'string' && context.includes('EGC persistent memory'), `the memory preamble is there, got: ${result.stdout.slice(0, 200)}`);
+      assert.ok(context.includes(`${host} resumes feature Z`), 'the state file is there');
+      if (host === 'vibe') {
+        assert.strictEqual(output.additionalContext, undefined, 'Vibe gets its own shape alone');
+      } else {
+        assert.strictEqual(output.hookSpecificOutput.hookEventName, 'SessionStart');
+        assert.strictEqual(output.hookSpecificOutput.additionalContext, output.additionalContext);
+      }
     });
   }
 
@@ -199,33 +231,51 @@ try {
     assert.deepStrictEqual(parseJson(result.stdout), {}, 'no project named and no memory for the working directory');
   });
 
-  test('the hooks run from the layout the plan of a target writes, and every require of the session runtime resolves on that tree', () => {
-    const { planInstallTargetScaffold } = require(path.join(REPO_ROOT, 'scripts', 'lib', 'install-targets', 'registry.js'));
-    const { HOST_SESSION_HOOK_MODULE_ID } = require(path.join(REPO_ROOT, 'scripts', 'lib', 'claude-settings-hook-copy-operations.js'));
-    const installed = path.join(root, 'home-installed');
-    fs.mkdirSync(path.join(installed, '.egc', 'state'), { recursive: true });
-    const projectInstalled = path.join(root, 'project-installed');
-    const qwenRoot = path.join(projectInstalled, '.qwen');
-    const plan = planInstallTargetScaffold({ target: 'qwen', repoRoot: REPO_ROOT, homeDir: installed, projectRoot: projectInstalled, modules: [] });
-    const copies = plan.operations.filter(operation => operation.kind === 'copy-path');
-    copyPlanned(copies);
-    const sessionFiles = copies.filter(operation => operation.moduleId === HOST_SESSION_HOOK_MODULE_ID).map(operation => operation.destinationPath);
-    assert.ok(sessionFiles.length > 0, 'the plan copies the session runtime');
-    assert.deepStrictEqual(unresolvedRequires(qwenRoot, sessionFiles), [], 'every file the session runtime requires is on the installed tree');
-    const sessionStart = plan.operations.find(operation => operation.hookEvent === 'SessionStart');
-    assert.ok(sessionStart && fs.existsSync(sessionStart.hookScriptPath), 'the SessionStart entry names a script the plan copied');
-    const stop = plan.operations.find(operation => operation.hookEvent === 'Stop');
-    assert.ok(stop && fs.existsSync(stop.hookScriptPath), 'the Stop entry names a script the plan copied');
-    fs.writeFileSync(path.join(installed, '.egc', 'state', 'work--demo.md'), '# Project State\n- installed layout works\n');
-    const result = runHook(sessionStart.hookScriptPath, installed, payloads.qwen);
-    assert.strictEqual(result.code, 0, result.stderr);
-    assert.strictEqual(result.stderr, '', 'nothing of the copied runtime failed to load');
-    const output = parseJson(result.stdout);
-    assert.ok(output && output.additionalContext.includes('installed layout works'), `the installed copy restores the state, got: ${result.stdout.slice(0, 200)}`);
-    const stopped = runHook(stop.hookScriptPath, installed, {});
-    assert.strictEqual(stopped.code, 0, stopped.stderr);
-    assert.deepStrictEqual(parseJson(stopped.stdout), {});
-  });
+  // One host per hooks format: the Claude Code settings of Qwen, the TOML of
+  // Kimi Code and the flat JSON of Crush.
+  const layouts = [
+    { target: 'qwen', host: 'qwen', root: installedProject => path.join(installedProject, '.qwen'), startEvent: 'SessionStart', stopEvent: 'Stop' },
+    { target: 'kimi', host: 'kimi', root: (installedProject, installedHome) => path.join(installedHome, '.kimi-code'), startEvent: 'kimi:session_start', stopEvent: 'kimi:stop' },
+    { target: 'crush', host: 'crush', root: (installedProject, installedHome) => path.join(installedHome, '.config', 'crush'), startEvent: 'crush:SessionStart', stopEvent: 'crush:TurnEnd' },
+  ];
+  for (const layout of layouts) {
+    test(`${layout.target}: the hooks run from the layout the plan writes, and every require of the session runtime resolves on that tree`, () => {
+      const { planInstallTargetScaffold } = require(path.join(REPO_ROOT, 'scripts', 'lib', 'install-targets', 'registry.js'));
+      const { HOST_SESSION_HOOK_MODULE_ID } = require(path.join(REPO_ROOT, 'scripts', 'lib', 'claude-settings-hook-copy-operations.js'));
+      const installed = path.join(root, `home-installed-${layout.target}`);
+      fs.mkdirSync(path.join(installed, '.egc', 'state'), { recursive: true });
+      const projectInstalled = path.join(root, `project-installed-${layout.target}`);
+      const installedRoot = layout.root(projectInstalled, installed);
+      const previous = { XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME, KIMI_CODE_HOME: process.env.KIMI_CODE_HOME, CRUSH_GLOBAL_CONFIG: process.env.CRUSH_GLOBAL_CONFIG };
+      for (const name of Object.keys(previous)) delete process.env[name];
+      let plan;
+      try {
+        plan = planInstallTargetScaffold({ target: layout.target, repoRoot: REPO_ROOT, homeDir: installed, projectRoot: projectInstalled, modules: [] });
+      } finally {
+        for (const [name, value] of Object.entries(previous)) {
+          if (value !== undefined) process.env[name] = value;
+        }
+      }
+      const copies = plan.operations.filter(operation => operation.kind === 'copy-path');
+      copyPlanned(copies);
+      const sessionFiles = copies.filter(operation => operation.moduleId === HOST_SESSION_HOOK_MODULE_ID).map(operation => operation.destinationPath);
+      assert.ok(sessionFiles.length > 0, 'the plan copies the session runtime');
+      assert.deepStrictEqual(unresolvedRequires(installedRoot, sessionFiles), [], 'every file the session runtime requires is on the installed tree');
+      const sessionStart = plan.operations.find(operation => operation.hookEvent === layout.startEvent);
+      assert.ok(sessionStart && fs.existsSync(sessionStart.hookScriptPath), 'the session-start entry names a script the plan copied');
+      const stop = plan.operations.find(operation => operation.hookEvent === layout.stopEvent);
+      assert.ok(stop && fs.existsSync(stop.hookScriptPath), 'the stop entry names a script the plan copied');
+      fs.writeFileSync(path.join(installed, '.egc', 'state', 'work--demo.md'), '# Project State\n- installed layout works\n');
+      const result = runHook(sessionStart.hookScriptPath, installed, payloads[layout.host], environments[layout.host]);
+      assert.strictEqual(result.code, 0, result.stderr);
+      assert.strictEqual(result.stderr, '', 'nothing of the copied runtime failed to load');
+      const output = parseJson(result.stdout);
+      assert.ok(output && output.additionalContext.includes('installed layout works'), `the installed copy restores the state, got: ${result.stdout.slice(0, 200)}`);
+      const stopped = runHook(stop.hookScriptPath, installed, {});
+      assert.strictEqual(stopped.code, 0, stopped.stderr);
+      assert.deepStrictEqual(parseJson(stopped.stdout), {});
+    });
+  }
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }
