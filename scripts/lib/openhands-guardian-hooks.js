@@ -27,6 +27,11 @@ const path = require('node:path');
 
 const HOST_LABEL = 'OpenHands';
 const PRE_TOOL_USE_EVENT = 'pre_tool_use';
+// The session events, in the same file and shape and with no matcher
+// (OpenHands matches a session event to every group, with or without one):
+// session_start restores the project memory, stop pushes the Team Brain.
+const SESSION_START_EVENT = 'session_start';
+const STOP_EVENT = 'stop';
 const TERMINAL_MATCHER = 'terminal';
 const GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/openhands-guardian-adapter.js';
 
@@ -74,29 +79,23 @@ function isEgcHookCommandEntry(entry, command) {
 // Mirrors claude-settings-hooks.js's mergeMatcherGroups/buildNewGroup
 // shape, adapted for OpenHands' matcher-group array (no isOwnBasename
 // migration here -- OpenHands is a brand-new integration with no prior
-// install path to migrate away from).
+// install path to migrate away from). The command goes into the first
+// group of the event with that matcher, and into a new group when there is
+// none: OpenHands runs every group a call matches, so a command in two
+// groups would run twice. Nothing changes when a group already has it.
 function addOpenHandsHookEntry(config, event, matcher, command) {
   const base = isPlainObject(config) ? config : {};
-  const existingGroups = Array.isArray(base[event]) ? base[event] : [];
-
-  let present = false;
-  const groups = existingGroups.map(group => {
-    if (!isMatcherGroup(group, matcher)) {
-      return group;
-    }
-    const hooks = Array.isArray(group.hooks) ? group.hooks : [];
-    if (hooks.some(entry => isEgcHookCommandEntry(entry, command))) {
-      present = true;
-      return group;
-    }
-    present = true;
-    return { ...group, hooks: [...hooks, { type: 'command', command }] };
-  });
-
-  if (!present) {
-    groups.push({ matcher, hooks: [{ type: 'command', command }] });
+  if (hasOpenHandsHookEntry(base, event, matcher, command)) {
+    return { config: base, changed: false };
   }
-
+  const existingGroups = Array.isArray(base[event]) ? base[event] : [];
+  const entry = { type: 'command', command };
+  const first = existingGroups.findIndex(group => isMatcherGroup(group, matcher));
+  const groups = first === -1
+    ? [...existingGroups, matcher === undefined ? { hooks: [entry] } : { matcher, hooks: [entry] }]
+    : existingGroups.map((group, index) => (index === first
+      ? { ...group, hooks: [...(Array.isArray(group.hooks) ? group.hooks : []), entry] }
+      : group));
   return { config: { ...base, [event]: groups }, changed: true };
 }
 
@@ -148,49 +147,68 @@ function resolveHooksJsonPath(projectRoot) {
   return path.join(projectRoot, '.openhands', 'hooks.json');
 }
 
-function applyOpenHandsGuardianHookToFile(hooksJsonPath, adapterScriptPath) {
-  const command = buildHookCommand(adapterScriptPath);
+// One EGC script under one event of the file, with a matcher for a tool
+// event and none for a session event.
+function applyOpenHandsHookToFile(hooksJsonPath, scriptPath, event, matcher) {
+  const command = buildHookCommand(scriptPath);
   const current = readHooksFile(hooksJsonPath);
-  const { config, changed } = addOpenHandsHookEntry(current, PRE_TOOL_USE_EVENT, TERMINAL_MATCHER, command);
+  const { config, changed } = addOpenHandsHookEntry(current, event, matcher, command);
   if (changed) {
     writeHooksFile(hooksJsonPath, config);
   }
   return { changed };
 }
 
-function removeOpenHandsGuardianHookFromFile(hooksJsonPath, adapterScriptPath) {
+function removeOpenHandsHookFromFile(hooksJsonPath, scriptPath, event, matcher) {
   if (!fs.existsSync(hooksJsonPath)) {
     return { changed: false };
   }
-  const command = buildHookCommand(adapterScriptPath);
+  const command = buildHookCommand(scriptPath);
   const current = readHooksFile(hooksJsonPath);
-  const { config, changed } = removeOpenHandsHookEntry(current, PRE_TOOL_USE_EVENT, TERMINAL_MATCHER, command);
+  const { config, changed } = removeOpenHandsHookEntry(current, event, matcher, command);
   if (changed) {
     writeHooksFile(hooksJsonPath, config);
   }
   return { changed };
 }
 
-function inspectOpenHandsGuardianHookFile(hooksJsonPath, adapterScriptPath) {
+function inspectOpenHandsHookFile(hooksJsonPath, scriptPath, event, matcher) {
   try {
-    const command = buildHookCommand(adapterScriptPath);
+    const command = buildHookCommand(scriptPath);
     const current = readHooksFile(hooksJsonPath);
-    return hasOpenHandsHookEntry(current, PRE_TOOL_USE_EVENT, TERMINAL_MATCHER, command) ? 'ok' : 'drifted';
+    return hasOpenHandsHookEntry(current, event, matcher, command) ? 'ok' : 'drifted';
   } catch {
     return 'drifted';
   }
 }
 
+function applyOpenHandsGuardianHookToFile(hooksJsonPath, adapterScriptPath) {
+  return applyOpenHandsHookToFile(hooksJsonPath, adapterScriptPath, PRE_TOOL_USE_EVENT, TERMINAL_MATCHER);
+}
+
+function removeOpenHandsGuardianHookFromFile(hooksJsonPath, adapterScriptPath) {
+  return removeOpenHandsHookFromFile(hooksJsonPath, adapterScriptPath, PRE_TOOL_USE_EVENT, TERMINAL_MATCHER);
+}
+
+function inspectOpenHandsGuardianHookFile(hooksJsonPath, adapterScriptPath) {
+  return inspectOpenHandsHookFile(hooksJsonPath, adapterScriptPath, PRE_TOOL_USE_EVENT, TERMINAL_MATCHER);
+}
+
 module.exports = {
   GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
   PRE_TOOL_USE_EVENT,
+  SESSION_START_EVENT,
+  STOP_EVENT,
   TERMINAL_MATCHER,
   addOpenHandsHookEntry,
   applyOpenHandsGuardianHookToFile,
+  applyOpenHandsHookToFile,
   buildHookCommand,
   inspectOpenHandsGuardianHookFile,
+  inspectOpenHandsHookFile,
   removeOpenHandsGuardianHookFromFile,
   removeOpenHandsHookEntry,
+  removeOpenHandsHookFromFile,
   resolveGuardianAdapterScriptDestination,
   resolveHooksJsonPath,
 };
