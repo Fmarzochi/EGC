@@ -68,12 +68,21 @@ function windowsAccount(env = process.env) {
   return env.USERDOMAIN ? `${env.USERDOMAIN}\\${user}` : user;
 }
 
-// The icacls call that leaves one account on a file or a directory: the
-// inherited entries removed, one full-control entry for the account, and on
-// a directory that entry inherited by what the directory will hold.
-function privateAclArguments(target, { directory = false, account = windowsAccount() } = {}) {
-  return ['icacls', [target, '/inheritance:r', '/grant:r', `${account}:${directory ? '(OI)(CI)F' : 'F'}`]];
+// The icacls calls that leave one account on a file or a directory: first the
+// access list reset to what the parent hands down, so an explicit entry
+// someone added before goes too, then the inherited entries removed and one
+// full-control entry for the account, on a directory inherited by what the
+// directory will hold.
+function privateAclCommands(target, { directory = false, account = windowsAccount() } = {}) {
+  return [
+    ['icacls', [target, '/reset']],
+    ['icacls', [target, '/inheritance:r', '/grant:r', `${account}:${directory ? '(OI)(CI)F' : 'F'}`]],
+  ];
 }
+
+// How long one icacls call may take before it is given up: a stalled call
+// must never hold the write of the configuration.
+const ACL_TIMEOUT_MS = 5000;
 
 // Private to the user on every platform: the POSIX mode where modes exist,
 // the ACL above on Windows, where chmod changes nothing. A protection that
@@ -82,9 +91,10 @@ function privateAclArguments(target, { directory = false, account = windowsAccou
 function makePrivate(target, mode, { directory = false, platform = process.platform, run = spawnSync } = {}) {
   if (platform === 'win32') {
     try {
-      const [command, args] = privateAclArguments(target, { directory });
-      const result = run(command, args, { stdio: 'ignore', windowsHide: true });
-      return Boolean(result) && result.status === 0;
+      return privateAclCommands(target, { directory }).every(([command, args]) => {
+        const result = run(command, args, { stdio: 'ignore', windowsHide: true, timeout: ACL_TIMEOUT_MS });
+        return Boolean(result) && result.status === 0;
+      });
     } catch {
       return false;
     }
@@ -97,12 +107,18 @@ function makePrivate(target, mode, { directory = false, platform = process.platf
   }
 }
 
+// What the person reads when Windows did not take the access list: the file
+// is written all the same, and they know to look at its permissions.
+const ACL_WARNING = 'team.json: Windows did not take the access list that keeps it to your account; check its permissions by hand.';
+
 // Writes the configuration text as it is: the previous file of a refused
-// init goes back through here byte for byte.
+// init goes back through here byte for byte. Answers whether the file and
+// its directory ended private to the user; on Windows a protection that
+// failed is also said on stderr, since the write itself goes on.
 function publishTeamConfigText(text, homeDir = os.homedir()) {
   const file = teamConfigPath(homeDir);
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-  makePrivate(path.dirname(file), 0o700, { directory: true });
+  const privateDir = makePrivate(path.dirname(file), 0o700, { directory: true });
   const temporary = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
   // Created exclusively: a link planted at the temporary name is never
   // written through.
@@ -112,12 +128,15 @@ function publishTeamConfigText(text, homeDir = os.homedir()) {
   } finally {
     fs.closeSync(descriptor);
   }
-  makePrivate(temporary, 0o600);
+  const privateFile = makePrivate(temporary, 0o600);
   fs.renameSync(temporary, file);
+  const isPrivate = privateDir && privateFile;
+  if (!isPrivate && process.platform === 'win32') process.stderr.write(`${ACL_WARNING}\n`);
+  return isPrivate;
 }
 
 function writeTeamConfig(config, homeDir = os.homedir()) {
-  publishTeamConfigText(JSON.stringify(config, null, 2), homeDir);
+  return publishTeamConfigText(JSON.stringify(config, null, 2), homeDir);
 }
 
-module.exports = { teamConfigPath, readTeamConfig, isAutosyncOn, publishTeamConfigText, writeTeamConfig, makePrivate, privateAclArguments, windowsAccount };
+module.exports = { ACL_WARNING, teamConfigPath, readTeamConfig, isAutosyncOn, publishTeamConfigText, writeTeamConfig, makePrivate, privateAclCommands, windowsAccount };

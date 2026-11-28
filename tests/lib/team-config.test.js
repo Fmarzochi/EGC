@@ -10,7 +10,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { teamConfigPath, readTeamConfig, isAutosyncOn, publishTeamConfigText, writeTeamConfig, makePrivate, privateAclArguments, windowsAccount } = require('../../scripts/lib/team-config');
+const { teamConfigPath, readTeamConfig, isAutosyncOn, publishTeamConfigText, writeTeamConfig, makePrivate, privateAclCommands, windowsAccount } = require('../../scripts/lib/team-config');
 
 function test(name, fn) {
   try {
@@ -78,37 +78,44 @@ function runTests() {
       assert.strictEqual(windowsAccount({ USERNAME: 'ana', USERDOMAIN: 'CASA' }), 'CASA\\ana', 'domain and user when the session names a domain');
       assert.strictEqual(windowsAccount({ USERNAME: 'ana' }), 'ana', 'the user alone otherwise');
       assert.deepStrictEqual(
-        privateAclArguments('C:\\Users\\ana\\.egc\\team.json', { account: 'CASA\\ana' }),
-        ['icacls', ['C:\\Users\\ana\\.egc\\team.json', '/inheritance:r', '/grant:r', 'CASA\\ana:F']],
-        'a file: inheritance removed, one full-control entry'
+        privateAclCommands('C:\\Users\\ana\\.egc\\team.json', { account: 'CASA\\ana' }),
+        [
+          ['icacls', ['C:\\Users\\ana\\.egc\\team.json', '/reset']],
+          ['icacls', ['C:\\Users\\ana\\.egc\\team.json', '/inheritance:r', '/grant:r', 'CASA\\ana:F']],
+        ],
+        'a file: the list reset first, so explicit entries go too, then inheritance removed and one full-control entry'
       );
       assert.strictEqual(
-        privateAclArguments('C:\\Users\\ana\\.egc', { directory: true, account: 'ana' })[1][3],
+        privateAclCommands('C:\\Users\\ana\\.egc', { directory: true, account: 'ana' })[1][1][3],
         'ana:(OI)(CI)F',
         'a directory: the entry is inherited by what it will hold'
       );
       const calls = [];
-      const run = (command, args) => { calls.push([command, args]); return { status: 0 }; };
+      const run = (command, args, options) => { calls.push([command, args, options]); return { status: 0 }; };
       assert.strictEqual(makePrivate('C:\\x\\team.json', 0o600, { platform: 'win32', run }), true);
-      assert.strictEqual(calls.length, 1);
+      assert.strictEqual(calls.length, 2, 'the reset and the grant, one call each');
       assert.strictEqual(calls[0][0], 'icacls');
-      assert.strictEqual(calls[0][1][0], 'C:\\x\\team.json');
-      assert.strictEqual(calls[0][1][3].endsWith(':F'), true);
+      assert.deepStrictEqual(calls[0][1], ['C:\\x\\team.json', '/reset']);
+      assert.strictEqual(calls[1][1][3].endsWith(':F'), true);
+      assert.strictEqual(calls[1][2].timeout, 5000, 'a stalled icacls is given up, so the write never hangs on it');
       assert.strictEqual(makePrivate('C:\\x', 0o700, { platform: 'win32', directory: true, run }), true);
-      assert.strictEqual(calls[1][1][3].endsWith(':(OI)(CI)F'), true, 'the directory call carries the inheritance flags');
-      assert.strictEqual(makePrivate('C:\\x\\team.json', 0o600, { platform: 'win32', run: () => ({ status: 5 }) }), false, 'a refused icacls is reported, not thrown');
+      assert.strictEqual(calls[3][1][3].endsWith(':(OI)(CI)F'), true, 'the directory call carries the inheritance flags');
+      let attempts = 0;
+      const refuseSecond = () => ({ status: attempts++ === 0 ? 0 : 5 });
+      assert.strictEqual(makePrivate('C:\\x\\team.json', 0o600, { platform: 'win32', run: refuseSecond }), false, 'a refused grant is reported, not thrown');
+      assert.strictEqual(makePrivate('C:\\x\\team.json', 0o600, { platform: 'win32', run: () => ({ status: 5 }) }), false, 'a refused reset is reported, not thrown');
       assert.strictEqual(makePrivate('C:\\x\\team.json', 0o600, { platform: 'win32', run: () => { throw new Error('no icacls'); } }), false, 'a missing icacls is reported, not thrown');
     }),
 
     test('elsewhere makePrivate applies the POSIX mode and answers false where modes cannot be set', () => withHome(home => {
       const file = path.join(home, 'secret');
       fs.writeFileSync(file, 'x');
-      const applied = makePrivate(file, 0o600, { platform: 'linux' });
+      assert.strictEqual(makePrivate(file, 0o600, { platform: 'linux' }), true, 'chmod on a file that exists');
       if (process.platform !== 'win32') {
-        assert.strictEqual(applied, true);
         assert.strictEqual(fs.statSync(file).mode & 0o777, 0o600);
       }
       assert.strictEqual(makePrivate(path.join(home, 'missing'), 0o600, { platform: 'linux' }), false, 'a path that is not there cannot be made private');
+      assert.strictEqual(typeof writeTeamConfig({ backend: 'git', remote: 'r', branch: 'main', teamKey: 'k' }, home), 'boolean', 'the writer answers whether the file ended private');
     })),
   ];
 

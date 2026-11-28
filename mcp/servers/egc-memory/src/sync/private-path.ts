@@ -17,6 +17,14 @@ export interface PrivatePathOptions {
   env?: NodeJS.ProcessEnv;
 }
 
+// How long one icacls call may take before it is given up: a stalled call
+// must never hold the write of the configuration.
+export const ACL_TIMEOUT_MS = 5000;
+
+// What the person reads when Windows did not take the access list: the file
+// is written all the same, and they know to look at its permissions.
+export const ACL_WARNING = 'team.json: Windows did not take the access list that keeps it to your account; check its permissions by hand.';
+
 // The account that keeps a file to itself on Windows: DOMAIN\user when the
 // session names a domain, the user name alone otherwise.
 export function windowsAccount(env: NodeJS.ProcessEnv = process.env): string {
@@ -24,11 +32,16 @@ export function windowsAccount(env: NodeJS.ProcessEnv = process.env): string {
   return env.USERDOMAIN ? `${env.USERDOMAIN}\\${user}` : user;
 }
 
-// The icacls call that leaves one account on a file or a directory: the
-// inherited entries removed, one full-control entry for the account, and on
-// a directory that entry inherited by what the directory will hold.
-export function privateAclArguments(target: string, directory: boolean, account: string = windowsAccount()): [string, string[]] {
-  return ['icacls', [target, '/inheritance:r', '/grant:r', `${account}:${directory ? '(OI)(CI)F' : 'F'}`]];
+// The icacls calls that leave one account on a file or a directory: first the
+// access list reset to what the parent hands down, so an explicit entry
+// someone added before goes too, then the inherited entries removed and one
+// full-control entry for the account, on a directory inherited by what the
+// directory will hold.
+export function privateAclCommands(target: string, directory: boolean, account: string = windowsAccount()): Array<[string, string[]]> {
+  return [
+    ['icacls', [target, '/reset']],
+    ['icacls', [target, '/inheritance:r', '/grant:r', `${account}:${directory ? '(OI)(CI)F' : 'F'}`]],
+  ];
 }
 
 // A protection that cannot be applied never blocks the write: the path is
@@ -37,9 +50,10 @@ export function makePrivate(target: string, mode: number, options: PrivatePathOp
   const { directory = false, platform = process.platform, run = spawnSync, env = process.env } = options;
   if (platform === 'win32') {
     try {
-      const [command, args] = privateAclArguments(target, directory, windowsAccount(env));
-      const result = run(command, args, { stdio: 'ignore', windowsHide: true });
-      return Boolean(result) && result.status === 0;
+      return privateAclCommands(target, directory, windowsAccount(env)).every(([command, args]) => {
+        const result = run(command, args, { stdio: 'ignore', windowsHide: true, timeout: ACL_TIMEOUT_MS });
+        return Boolean(result) && result.status === 0;
+      });
     } catch {
       return false;
     }
