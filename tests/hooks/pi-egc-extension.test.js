@@ -151,6 +151,20 @@ async function main() {
     }
   });
 
+  await test('a session resumed from another directory gets the memory of the project it was opened in', async () => {
+    const { root, home, project, stateFile } = sessionHome();
+    try {
+      fs.writeFileSync(stateFile, '# Project State\n- pi resumes feature Z\n');
+      const elsewhere = path.join(root, 'work', 'elsewhere');
+      fs.mkdirSync(elsewhere, { recursive: true });
+      const run = drive(home, extensionPath, { cwd: elsewhere, sessionCwd: project, sessionId: 'pi-resumed', steps: [{ event: 'before_agent_start' }] });
+      assert.strictEqual(run.code, 0, run.stderr);
+      assert.ok(run.output.answers[0].message.content.includes('pi resumes feature Z'), 'the session directory wins over the process directory');
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   await test('a project without memory gets nothing, and so does a run without a session id', async () => {
     const { root, home, project } = sessionHome();
     try {

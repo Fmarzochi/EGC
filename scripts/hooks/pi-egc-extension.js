@@ -51,9 +51,6 @@ const meshNotice = loadOptional(loadHook, 'mesh-events-inject');
 
 const HOST = 'pi';
 const MEMORY_MESSAGE_TYPE = 'egc-memory';
-// How many sessions one pi process remembers as served; the oldest leaves
-// when a newer one arrives past the cap.
-const MAX_REMEMBERED_SESSIONS = 64;
 
 const WRITE_TOOLS = { edit: 'MultiEdit', write: 'Write' };
 
@@ -104,8 +101,23 @@ function crushCommand(input) {
   }
 }
 
+function firstString(...values) {
+  return values.find(value => typeof value === 'string' && value.length > 0);
+}
+
+// The directory of the session before the one of the process: a session
+// resumed from elsewhere keeps the project it was opened in, and the memory
+// is keyed by project.
+function sessionCwdOf(ctx) {
+  try {
+    return ctx?.sessionManager?.getCwd?.();
+  } catch {
+    return undefined;
+  }
+}
+
 function cwdOf(ctx) {
-  return typeof ctx?.cwd === 'string' && ctx.cwd ? ctx.cwd : process.cwd();
+  return firstString(sessionCwdOf(ctx), ctx?.cwd) || process.cwd();
 }
 
 function handleToolCall(event, ctx) {
@@ -156,12 +168,12 @@ function meshNoticeFor(sessionId) {
 }
 
 // Which sessions of this process already got their memory: the first run of
-// a session is the one that injects it.
+// a session is the one that injects it, and a session stays served for the
+// life of the process, so no session is served twice.
 function createServedSessions() {
   const served = new Set();
   return sessionId => {
     if (served.has(sessionId)) return false;
-    if (served.size >= MAX_REMEMBERED_SESSIONS) served.delete(served.values().next().value);
     served.add(sessionId);
     return true;
   };

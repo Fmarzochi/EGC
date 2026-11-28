@@ -18,9 +18,15 @@ const payload = JSON.parse(process.argv[3]);
 const handlers = new Map();
 extension({ on: (event, handler) => handlers.set(event, handler) });
 
+// The directory of the process (ctx.cwd) and the one the session was opened
+// in (sessionManager.getCwd), which pi keeps apart when a session is resumed
+// from elsewhere; the payload names the second only when it differs.
 const ctx = {
   cwd: payload.cwd,
-  sessionManager: { getSessionId: () => payload.sessionId },
+  sessionManager: {
+    getSessionId: () => payload.sessionId,
+    getCwd: () => payload.sessionCwd || payload.cwd,
+  },
 };
 
 async function main() {
