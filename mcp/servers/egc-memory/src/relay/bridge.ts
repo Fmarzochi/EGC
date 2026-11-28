@@ -179,18 +179,6 @@ export class BridgeLock {
   }
 }
 
-// One writer at a time: inside a memory server the bridge takes its turn with
-// the write arbiter of the server; alone, its own writes queue behind each
-// other here, since two transactions cannot share one connection.
-function chainedQueue(): <T>(work: () => Promise<T>) => Promise<T> {
-  let tail: Promise<unknown> = Promise.resolve();
-  return <T>(work: () => Promise<T>): Promise<T> => {
-    const next = tail.then(work, work);
-    tail = next.catch(() => undefined);
-    return next;
-  };
-}
-
 export class MeshBridge {
   readonly online = new Set<string>();
   connected = false;
@@ -228,7 +216,10 @@ export class MeshBridge {
     this.replay = new ReplayGuard(this.now);
     this.authKey = meshAuthKey(options.teamKey);
     this.sealKey = meshSealKey(options.teamKey);
-    this.serialize = options.enqueue ?? chainedQueue();
+    // Inside a memory server the bridge takes its turn with the write
+    // arbiter of the server; alone, the frames are already handled one at a
+    // time, and nothing else of the bridge opens a transaction.
+    this.serialize = options.enqueue ?? (work => work());
   }
 
   get machine(): MachineIdentity {
@@ -574,11 +565,11 @@ export class MeshBridge {
   // bridge is alive.
   private startPresence(): void {
     if (this.presenceTimer) clearInterval(this.presenceTimer);
-    // The sweep takes its turn with the other writers, since it runs in a
-    // transaction of its own.
+    // The sweep is one statement, so it needs no turn in the queue of the
+    // writers and never meets a transaction of the frames being handled.
     const tick = (): void => {
       this.announce().catch(error => this.log(`mesh: presence was not sent: ${error instanceof Error ? error.message : String(error)}`));
-      this.serialize(() => sweepRemoteMachines(this.options.db, this.now()))
+      sweepRemoteMachines(this.options.db, this.now())
         .then(swept => {
           for (const id of swept) this.online.delete(id);
         })
