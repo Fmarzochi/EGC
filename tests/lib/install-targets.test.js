@@ -2955,7 +2955,6 @@ function runTests() {
     }
   }));
 
-<<<<<<< HEAD
   tally(test('Devin, Kimi Code, Mistral Vibe and Crush register the session hooks in their own files beside their gates and scaffold the session runtime', () => runWithoutConfigHomeVariables(() => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
