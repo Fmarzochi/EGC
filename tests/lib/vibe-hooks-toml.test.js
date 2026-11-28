@@ -176,6 +176,53 @@ tally(test('parseHookBlocks reads the name, command and match of every [[hooks]]
   ]);
 }));
 
+tally(test('the session hooks go in as session_start and post_agent blocks with no match beside the gates, not strict, each replaced or removed on its own', () => {
+  const { VIBE_HOOK_OPERATION_HANDLERS, VIBE_POST_AGENT_EVENT, VIBE_SESSION_START_EVENT, createVibeSessionHookMergeOperations } = require('../../scripts/lib/vibe-hooks-toml');
+  const root = tempRoot();
+  try {
+    const file = resolveVibeHooksTomlPath(root);
+    fs.writeFileSync(file, OWN_BLOCK);
+    const guardian = resolveVibeGuardianAdapterDestination(root);
+    applyVibeHookToFile(file, guardian, VIBE_GUARDIAN_MATCHER);
+    const [start, stop] = createVibeSessionHookMergeOperations(root);
+    assert.strictEqual(start.hookEvent, VIBE_SESSION_START_EVENT);
+    assert.strictEqual(start.hookScriptPath, path.join(root, 'scripts', 'hooks', 'vibe-session-start.js'));
+    assert.strictEqual(stop.hookEvent, VIBE_POST_AGENT_EVENT);
+    assert.strictEqual(stop.hookScriptPath, path.join(root, 'scripts', 'hooks', 'team-sync-stop.js'));
+    assert.strictEqual(start.hookMatcher, undefined, 'a session hook takes no match');
+    assert.strictEqual(start.moduleId, 'egc-host-session-hook');
+    assert.strictEqual(start.destinationPath, file);
+    for (const operation of [start, stop]) {
+      VIBE_HOOK_OPERATION_HANDLERS.apply(operation);
+      VIBE_HOOK_OPERATION_HANDLERS.apply(operation);
+    }
+    const written = fs.readFileSync(file, 'utf8');
+    assert.ok(written.startsWith(OWN_BLOCK.trimEnd()), 'the person\'s text comes first, unchanged');
+    const hooks = TOML.parse(written).hooks;
+    assert.deepStrictEqual(hooks.map(hook => [hook.name, hook.type]), [
+      ['deny-rm-rf', 'pre_tool'],
+      ['egc-guardian', 'pre_tool'],
+      ['egc-session-start', 'session_start'],
+      ['egc-stop', 'post_agent'],
+    ], 'one block per EGC hook, applied twice without doubling');
+    assert.deepStrictEqual(Object.keys(hooks[2]).sort(), ['command', 'description', 'name', 'strict', 'type'], 'a session block has no match key');
+    assert.strictEqual(hooks[2].strict, false, 'a restore that failed never stops the session');
+    assert.strictEqual(hooks[3].command, buildHookCommand(stop.hookScriptPath));
+    assert.strictEqual(VIBE_HOOK_OPERATION_HANDLERS.inspect(start), 'ok');
+    assert.strictEqual(VIBE_HOOK_OPERATION_HANDLERS.inspect(stop), 'ok');
+    assert.strictEqual(inspectVibeHookFile(file, guardian, VIBE_GUARDIAN_MATCHER), 'ok', 'the Guardian block is untouched');
+    fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace('type = "post_agent"', 'type = "session_end"'));
+    assert.strictEqual(VIBE_HOOK_OPERATION_HANDLERS.inspect(stop), 'drifted', 'a type changed by hand is drift, with no match to compare');
+    assert.strictEqual(inspectVibeHookFile(file, stop.hookScriptPath), 'ok', 'a retirement check only needs the name and the command');
+    VIBE_HOOK_OPERATION_HANDLERS.apply(stop);
+    assert.strictEqual(VIBE_HOOK_OPERATION_HANDLERS.inspect(stop), 'ok', 'repair rewrites the block');
+    VIBE_HOOK_OPERATION_HANDLERS.remove(start);
+    assert.deepStrictEqual(TOML.parse(fs.readFileSync(file, 'utf8')).hooks.map(hook => hook.name), ['deny-rm-rf', 'egc-guardian', 'egc-stop'], 'only the session start block leaves');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}));
+
 tally(test('the merge operations name the hooks.toml, the vibe:pre_tool event, the matcher and the adapter each runs', () => {
   const root = path.join('home', 'person', '.vibe');
   const guardian = createVibeGuardianHookMergeOperation(root);

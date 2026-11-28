@@ -248,6 +248,54 @@ tally(test('a comment that introduces the next table survives when the EGC block
   }
 }));
 
+tally(test('the session hooks go in as SessionStart and Stop blocks with no matcher beside the Guardian block, each replaced or removed on its own', () => {
+  const { KIMI_HOOK_OPERATION_HANDLERS, KIMI_SESSION_START_EVENT, KIMI_STOP_EVENT, createKimiSessionHookMergeOperations } = require('../../scripts/lib/kimi-hooks-toml');
+  const root = tempRoot();
+  try {
+    const file = resolveKimiConfigTomlPath(root);
+    fs.writeFileSync(file, OWN_CONFIG);
+    const guardian = resolveKimiGuardianAdapterDestination(root);
+    applyKimiHookToFile(file, guardian, KIMI_GUARDIAN_MATCHER);
+    const [start, stop] = createKimiSessionHookMergeOperations(root);
+    assert.strictEqual(start.hookEvent, KIMI_SESSION_START_EVENT);
+    assert.strictEqual(start.hookScriptPath, path.join(root, 'scripts', 'hooks', 'kimi-session-start.js'));
+    assert.strictEqual(stop.hookEvent, KIMI_STOP_EVENT);
+    assert.strictEqual(stop.hookScriptPath, path.join(root, 'scripts', 'hooks', 'team-sync-stop.js'));
+    assert.strictEqual(start.hookMatcher, undefined, 'a session event takes no matcher');
+    assert.strictEqual(start.moduleId, 'egc-host-session-hook');
+    assert.strictEqual(start.destinationPath, file);
+    for (const operation of [start, stop]) {
+      KIMI_HOOK_OPERATION_HANDLERS.apply(operation);
+      KIMI_HOOK_OPERATION_HANDLERS.apply(operation);
+    }
+    const written = fs.readFileSync(file, 'utf8');
+    assert.ok(written.startsWith(OWN_CONFIG.trimEnd()), 'the person\'s text comes first, unchanged');
+    const hooks = TOML.parse(written).hooks;
+    assert.deepStrictEqual(hooks.map(hook => [hook.event, hook.command]), [
+      ['PreToolUse', 'python ./guard-bash.py'],
+      ['PreToolUse', buildHookCommand(guardian)],
+      ['SessionStart', buildHookCommand(start.hookScriptPath)],
+      ['Stop', buildHookCommand(stop.hookScriptPath)],
+    ], 'one block per EGC script, applied twice without doubling');
+    assert.deepStrictEqual(Object.keys(hooks[2]).sort(), ['command', 'event', 'timeout'], 'a session block has no matcher key');
+    assert.strictEqual(KIMI_HOOK_OPERATION_HANDLERS.inspect(start), 'ok');
+    assert.strictEqual(KIMI_HOOK_OPERATION_HANDLERS.inspect(stop), 'ok');
+    assert.strictEqual(inspectKimiHookFile(file, guardian, KIMI_GUARDIAN_MATCHER), 'ok', 'the Guardian block is untouched');
+    fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace('event = "Stop"', 'event = "SessionEnd"'));
+    assert.strictEqual(KIMI_HOOK_OPERATION_HANDLERS.inspect(stop), 'drifted', 'an event changed by hand is drift');
+    assert.strictEqual(KIMI_HOOK_OPERATION_HANDLERS.inspect(start), 'ok');
+    KIMI_HOOK_OPERATION_HANDLERS.apply(stop);
+    assert.strictEqual(KIMI_HOOK_OPERATION_HANDLERS.inspect(stop), 'ok', 'repair rewrites the block');
+    KIMI_HOOK_OPERATION_HANDLERS.remove(start);
+    const after = TOML.parse(fs.readFileSync(file, 'utf8')).hooks;
+    assert.deepStrictEqual(after.map(hook => hook.event), ['PreToolUse', 'PreToolUse', 'Stop'], 'only the session start block leaves');
+    assert.deepStrictEqual(removeKimiHookFromFile(file), { changed: true }, 'with no script named every EGC block leaves');
+    assert.deepStrictEqual(TOML.parse(fs.readFileSync(file, 'utf8')).hooks.map(hook => hook.command), ['python ./guard-bash.py']);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}));
+
 tally(test('the merge operation names config.toml, the kimi:pre_tool event, the matcher and the adapter it runs', () => {
   const root = path.join('home', 'person', '.kimi-code');
   const operation = createKimiGuardianHookMergeOperation(root);
