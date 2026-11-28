@@ -68,14 +68,15 @@ function parseJson(text) {
   }
 }
 
-// The runtime as an install lays it out: only the files the plan copies, each
-// under its own path, so a require one of them makes and the plan forgot
-// fails here and not on the machine of the person.
-function copyPlannedRuntime(root, sources) {
-  for (const source of sources) {
-    const destination = path.join(root, ...source.split('/'));
-    fs.mkdirSync(path.dirname(destination), { recursive: true });
-    fs.copyFileSync(path.join(REPO_ROOT, ...source.split('/')), destination);
+// The runtime as an install lays it out: every file the plan of the target
+// copies, each at the destination the plan names, so a require one of them
+// makes and the plan forgot fails here and not on the machine of the person.
+function copyPlanned(operations) {
+  for (const operation of operations) {
+    const source = operation.sourcePath || path.join(REPO_ROOT, ...operation.sourceRelativePath.split('/'));
+    fs.mkdirSync(path.dirname(operation.destinationPath), { recursive: true });
+    if (fs.statSync(source).isDirectory()) fs.cpSync(source, operation.destinationPath, { recursive: true });
+    else fs.copyFileSync(source, operation.destinationPath);
   }
 }
 
@@ -90,15 +91,15 @@ const OPTIONAL_REQUIRES = new Set([
   'scripts/lib/team-mcp-client.js needs ../../package.json',
 ]);
 
-// Every relative require of the copied files, resolved among the copies;
+// Every relative require of the given files, resolved on the installed tree;
 // comment lines are not read, and the fallbacks above are not demanded.
-function unresolvedRequires(root, sources) {
+function unresolvedRequires(root, files) {
   const missing = [];
-  for (const source of sources) {
-    const file = path.join(root, ...source.split('/'));
+  for (const file of files) {
+    const label = path.relative(root, file).split(path.sep).join('/');
     const code = fs.readFileSync(file, 'utf8').split('\n').filter(line => !line.trim().startsWith('//')).join('\n');
     for (const match of code.matchAll(/require\((['"])(\.[^'"]+)\1\)/g)) {
-      const need = `${source} needs ${match[2]}`;
+      const need = `${label} needs ${match[2]}`;
       if (OPTIONAL_REQUIRES.has(need)) continue;
       const target = path.resolve(path.dirname(file), match[2]);
       const candidates = [target, `${target}.js`, path.join(target, 'index.js')];
@@ -192,23 +193,32 @@ try {
     assert.deepStrictEqual(parseJson(result.stdout), {}, 'no project named and no memory for the working directory');
   });
 
-  test('the hooks run from the layout an install writes, with only the files the plan copies, and every require of those files resolves among them', () => {
-    const { SESSION_HOOK_LIB_SOURCES, TEAM_SYNC_STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH } = require(path.join(REPO_ROOT, 'scripts', 'lib', 'claude-settings-hook-copy-operations.js'));
-    const sources = ['scripts/hooks/qwen-session-start.js', TEAM_SYNC_STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH, ...SESSION_HOOK_LIB_SOURCES];
+  test('the hooks run from the layout the plan of a target writes, and every require of the session runtime resolves on that tree', () => {
+    const { planInstallTargetScaffold } = require(path.join(REPO_ROOT, 'scripts', 'lib', 'install-targets', 'registry.js'));
+    const { HOST_SESSION_HOOK_MODULE_ID } = require(path.join(REPO_ROOT, 'scripts', 'lib', 'claude-settings-hook-copy-operations.js'));
     const installed = path.join(root, 'home-installed');
     fs.mkdirSync(path.join(installed, '.egc', 'state'), { recursive: true });
-    const qwenRoot = path.join(root, 'project-installed', '.qwen');
-    copyPlannedRuntime(qwenRoot, sources);
-    assert.deepStrictEqual(unresolvedRequires(qwenRoot, sources), [], 'every file the copied runtime requires is in the plan');
+    const projectInstalled = path.join(root, 'project-installed');
+    const qwenRoot = path.join(projectInstalled, '.qwen');
+    const plan = planInstallTargetScaffold({ target: 'qwen', repoRoot: REPO_ROOT, homeDir: installed, projectRoot: projectInstalled, modules: [] });
+    const copies = plan.operations.filter(operation => operation.kind === 'copy-path');
+    copyPlanned(copies);
+    const sessionFiles = copies.filter(operation => operation.moduleId === HOST_SESSION_HOOK_MODULE_ID).map(operation => operation.destinationPath);
+    assert.ok(sessionFiles.length > 0, 'the plan copies the session runtime');
+    assert.deepStrictEqual(unresolvedRequires(qwenRoot, sessionFiles), [], 'every file the session runtime requires is on the installed tree');
+    const sessionStart = plan.operations.find(operation => operation.hookEvent === 'SessionStart');
+    assert.ok(sessionStart && fs.existsSync(sessionStart.hookScriptPath), 'the SessionStart entry names a script the plan copied');
+    const stop = plan.operations.find(operation => operation.hookEvent === 'Stop');
+    assert.ok(stop && fs.existsSync(stop.hookScriptPath), 'the Stop entry names a script the plan copied');
     fs.writeFileSync(path.join(installed, '.egc', 'state', 'work--demo.md'), '# Project State\n- installed layout works\n');
-    const result = runHook(path.join(qwenRoot, 'scripts', 'hooks', 'qwen-session-start.js'), installed, payloads.qwen);
+    const result = runHook(sessionStart.hookScriptPath, installed, payloads.qwen);
     assert.strictEqual(result.code, 0, result.stderr);
     assert.strictEqual(result.stderr, '', 'nothing of the copied runtime failed to load');
     const output = parseJson(result.stdout);
     assert.ok(output && output.additionalContext.includes('installed layout works'), `the installed copy restores the state, got: ${result.stdout.slice(0, 200)}`);
-    const stop = runHook(path.join(qwenRoot, 'scripts', 'hooks', 'team-sync-stop.js'), installed, {});
-    assert.strictEqual(stop.code, 0, stop.stderr);
-    assert.deepStrictEqual(parseJson(stop.stdout), {});
+    const stopped = runHook(stop.hookScriptPath, installed, {});
+    assert.strictEqual(stopped.code, 0, stopped.stderr);
+    assert.deepStrictEqual(parseJson(stopped.stdout), {});
   });
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
