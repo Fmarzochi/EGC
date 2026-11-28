@@ -164,19 +164,31 @@ function runTests() {
     ]);
   })));
 
-  (tally(test('CodeBuddy: the servers go under mcpServers in the first existing of ~/.codebuddy/.mcp.json, ~/.codebuddy/mcp.json and ~/.codebuddy.json, the documented name when none exists, gated on ~/.codebuddy or codebuddy on PATH', () => runWithoutConfigHomeVariables(() => {
+  (tally(test('CodeBuddy: the servers go under mcpServers in the first existing of ~/.codebuddy/.mcp.json, ~/.codebuddy/mcp.json and ~/.codebuddy.json, the documented name when none exists, gated on ~/.codebuddy, on any of those files or on codebuddy on PATH', () => runWithoutConfigHomeVariables(() => {
     const tmpHome = makeTempDir();
     const savedPath = process.env.PATH;
+    const savedPathExt = process.env.PATHEXT;
     try {
-      process.env.PATH = path.join(tmpHome, 'empty-bin');
-      fs.mkdirSync(process.env.PATH, { recursive: true });
+      const emptyBin = path.join(tmpHome, 'empty-bin');
+      const codebuddyBin = path.join(tmpHome, 'codebuddy-bin');
+      fs.mkdirSync(emptyBin, { recursive: true });
+      fs.mkdirSync(codebuddyBin, { recursive: true });
+      fs.writeFileSync(path.join(codebuddyBin, 'codebuddy'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+      fs.writeFileSync(path.join(codebuddyBin, 'codebuddy.CMD'), '@echo off\r\n', { mode: 0o755 });
+      process.env.PATHEXT = '.CMD';
+      process.env.PATH = emptyBin;
       const absent = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'CodeBuddy');
       assert.ok(absent, 'CodeBuddy must be a registration target');
-      assert.strictEqual(absent.gate(), false, 'no ~/.codebuddy and no codebuddy on PATH keep the gate closed');
+      assert.strictEqual(absent.gate(), false, 'no ~/.codebuddy, no file and no codebuddy on PATH keep the gate closed');
       assert.strictEqual(absent.path, path.join(tmpHome, '.codebuddy', '.mcp.json'), 'with no file yet, the documented name is created');
+      process.env.PATH = `${codebuddyBin}${path.delimiter}${emptyBin}`;
+      assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'CodeBuddy').gate(), true, 'a codebuddy on PATH opens the gate');
+      process.env.PATH = emptyBin;
       const legacy = path.join(tmpHome, '.codebuddy.json');
       fs.writeFileSync(legacy, JSON.stringify({ projects: {} }));
-      assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'CodeBuddy').path, legacy, 'the legacy settings file is written when it is the only one');
+      const legacyOnly = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'CodeBuddy');
+      assert.strictEqual(legacyOnly.path, legacy, 'the legacy settings file is written when it is the only one');
+      assert.strictEqual(legacyOnly.gate(), true, 'the legacy file alone, outside the directory, opens the gate');
       const codebuddyDir = path.join(tmpHome, '.codebuddy');
       fs.mkdirSync(codebuddyDir, { recursive: true });
       fs.writeFileSync(path.join(codebuddyDir, 'mcp.json'), '{}');
@@ -193,23 +205,39 @@ function runTests() {
       assert.deepStrictEqual(JSON.parse(fs.readFileSync(legacy, 'utf8')), { projects: {} }, 'the legacy file is left alone once a documented file exists');
     } finally {
       if (savedPath === undefined) delete process.env.PATH; else process.env.PATH = savedPath;
+      if (savedPathExt === undefined) delete process.env.PATHEXT; else process.env.PATHEXT = savedPathExt;
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }
   }))));
 
-  (tally(test('Cline CLI: the servers go under mcpServers in ~/.cline/data/settings/cline_mcp_settings.json, moved by CLINE_MCP_SETTINGS_PATH, gated on ~/.cline or cline on PATH', () => runWithoutConfigHomeVariables(() => {
+  (tally(test('Cline CLI: the servers go under mcpServers in ~/.cline/data/settings/cline_mcp_settings.json, moved by CLINE_MCP_SETTINGS_PATH, gated on ~/.cline, on the moved file or on cline on PATH', () => runWithoutConfigHomeVariables(() => {
     const tmpHome = makeTempDir();
     const savedPath = process.env.PATH;
+    const savedPathExt = process.env.PATHEXT;
     const savedSettings = process.env.CLINE_MCP_SETTINGS_PATH;
     try {
       delete process.env.CLINE_MCP_SETTINGS_PATH;
-      process.env.PATH = path.join(tmpHome, 'empty-bin');
-      fs.mkdirSync(process.env.PATH, { recursive: true });
+      const emptyBin = path.join(tmpHome, 'empty-bin');
+      const clineBin = path.join(tmpHome, 'cline-bin');
+      fs.mkdirSync(emptyBin, { recursive: true });
+      fs.mkdirSync(clineBin, { recursive: true });
+      fs.writeFileSync(path.join(clineBin, 'cline'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+      fs.writeFileSync(path.join(clineBin, 'cline.CMD'), '@echo off\r\n', { mode: 0o755 });
+      process.env.PATHEXT = '.CMD';
+      process.env.PATH = emptyBin;
       const absent = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Cline CLI');
       assert.ok(absent, 'Cline CLI must be a registration target');
-      assert.strictEqual(absent.gate(), false, 'no ~/.cline and no cline on PATH keep the gate closed');
+      assert.strictEqual(absent.gate(), false, 'no ~/.cline, no moved file and no cline on PATH keep the gate closed');
       assert.strictEqual(absent.path, path.join(tmpHome, '.cline', 'data', 'settings', 'cline_mcp_settings.json'));
       assert.strictEqual(absent.allowedRoot, undefined, 'the default path lands under the home');
+      process.env.PATH = `${clineBin}${path.delimiter}${emptyBin}`;
+      assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Cline CLI').gate(), true, 'a cline on PATH opens the gate');
+      process.env.PATH = emptyBin;
+      process.env.CLINE_MCP_SETTINGS_PATH = path.join(tmpHome, 'elsewhere', 'mcp.json');
+      assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Cline CLI').gate(), false, 'a moved path that exists nowhere yet keeps the gate closed');
+      fs.mkdirSync(path.join(tmpHome, 'elsewhere'), { recursive: true });
+      assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Cline CLI').gate(), true, 'the directory of the moved file opens the gate');
+      delete process.env.CLINE_MCP_SETTINGS_PATH;
       fs.mkdirSync(path.join(tmpHome, '.cline'), { recursive: true });
       const target = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Cline CLI');
       assert.strictEqual(target.gate(), true, 'the ~/.cline directory alone opens the gate');
@@ -224,6 +252,7 @@ function runTests() {
       assert.strictEqual(moved.allowedRoot, path.join(tmpHome, 'cline-settings'), 'the moved file may land in its own directory');
     } finally {
       if (savedPath === undefined) delete process.env.PATH; else process.env.PATH = savedPath;
+      if (savedPathExt === undefined) delete process.env.PATHEXT; else process.env.PATHEXT = savedPathExt;
       if (savedSettings === undefined) delete process.env.CLINE_MCP_SETTINGS_PATH; else process.env.CLINE_MCP_SETTINGS_PATH = savedSettings;
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }

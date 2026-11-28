@@ -167,8 +167,11 @@ function createTraeMeshNoticeOperations(adapter, traeRoot) {
 // path the docs do not name, so only the project file is written, with the
 // absolute paths of this machine's servers, as the Devin project target
 // does. EGC_DISABLED_MCPS is applied at planning time, so the payload the
-// install state records already omits a disabled server.
+// install state records already omits a disabled server. A plan with no
+// repository root (a dry plan of the project files alone) has no server
+// path to write and gets no MCP operation.
 function createTraeMcpOperations(repoRoot, traeRoot) {
+  if (typeof repoRoot !== 'string' || repoRoot.length === 0) return [];
   const payload = {
     mcpServers: Object.fromEntries(EGC_MCP_SERVERS.map(name => [name, {
       command: 'node',

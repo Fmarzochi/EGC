@@ -130,6 +130,15 @@ function resolveCodeBuddyMcpPath(homeDir) {
   return candidates.find(candidate => fs.existsSync(candidate)) || candidates[0];
 }
 
+// A CodeBuddy install shows as its config directory, as any of the three
+// files it reads (the legacy ~/.codebuddy.json lives outside the directory),
+// or as the binary on PATH.
+function codeBuddyInstalled(homeDir) {
+  return fs.existsSync(path.join(homeDir, '.codebuddy'))
+    || fs.existsSync(resolveCodeBuddyMcpPath(homeDir))
+    || commandExists('codebuddy');
+}
+
 // The Cline CLI reads its MCP servers from
 // ~/.cline/data/settings/cline_mcp_settings.json, or from the file that
 // CLINE_MCP_SETTINGS_PATH names, a leading tilde expanded to the home
@@ -144,6 +153,17 @@ function resolveClineMcpSettingsPath(homeDir) {
     return path.resolve(configured);
   }
   return path.join(homeDir, '.cline', 'data', 'settings', 'cline_mcp_settings.json');
+}
+
+// A Cline CLI install shows as its data root, as the settings file the
+// variable moved (or the directory that holds it), or as the binary on PATH.
+function clineInstalled(homeDir) {
+  if (fs.existsSync(path.join(homeDir, '.cline'))) return true;
+  if (process.env.CLINE_MCP_SETTINGS_PATH) {
+    const moved = resolveClineMcpSettingsPath(homeDir);
+    if (fs.existsSync(moved) || fs.existsSync(path.dirname(moved))) return true;
+  }
+  return commandExists('cline');
 }
 
 function buildMcpRegistrationTargets(homeDir) {
@@ -359,20 +379,19 @@ function buildMcpRegistrationTargets(homeDir) {
       format: 'amp-settings',
     },
     {
-      // See resolveCodeBuddyMcpPath above. The gate opens on ~/.codebuddy
-      // (created on first launch) or codebuddy on PATH.
+      // See resolveCodeBuddyMcpPath and codeBuddyInstalled above.
       name: 'CodeBuddy',
       path: resolveCodeBuddyMcpPath(homeDir),
-      gate: () => fs.existsSync(path.join(homeDir, '.codebuddy')) || commandExists('codebuddy'),
+      gate: () => codeBuddyInstalled(homeDir),
       format: 'json',
     },
     {
-      // See resolveClineMcpSettingsPath above. The gate opens on ~/.cline
-      // (the data root of the CLI) or cline on PATH; a settings path moved by
-      // CLINE_MCP_SETTINGS_PATH is allowed to land in its own directory.
+      // See resolveClineMcpSettingsPath and clineInstalled above; a settings
+      // path moved by CLINE_MCP_SETTINGS_PATH is allowed to land in its own
+      // directory.
       name: 'Cline CLI',
       path: resolveClineMcpSettingsPath(homeDir),
-      gate: () => fs.existsSync(path.join(homeDir, '.cline')) || commandExists('cline'),
+      gate: () => clineInstalled(homeDir),
       allowedRoot: process.env.CLINE_MCP_SETTINGS_PATH ? path.dirname(resolveClineMcpSettingsPath(homeDir)) : undefined,
       format: 'json',
     },
