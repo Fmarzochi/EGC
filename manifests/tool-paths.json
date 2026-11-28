@@ -1116,6 +1116,14 @@
       "source": "https://docs.devin.ai/cli/extensibility/hooks"
     },
     {
+      "adapter": "trae-project",
+      "surface": "mcp",
+      "path": "<project>/.trae/mcp.json",
+      "status": "documented",
+      "source": "https://docs.trae.ai/ide/add-mcp-servers",
+      "note": "Project-scope MCP file of Trae, read once Project MCP is enabled in Settings > MCP (read on 2026-11-28): the standard mcpServers object with command, args and env. The global servers live in a file the Trae UI manages, at a path the docs do not name, so EGC writes only this one."
+    },
+    {
       "adapter": "windsurf-project",
       "surface": "mcp",
       "path": "<project>/.devin/mcp_config.local.json",

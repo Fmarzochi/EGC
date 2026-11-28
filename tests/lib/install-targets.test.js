@@ -3938,6 +3938,25 @@ function runTests() {
     )), 'opencode scaffolds the write validator script for its plugin');
   }));
 
+  tally(test('trae-project writes the EGC MCP servers into .trae/mcp.json as a merge-json operation, in the mcpServers shape Trae documents', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+    const plan = planInstallTargetScaffold({ target: 'trae', repoRoot, modules: [], projectRoot });
+    const merges = plan.operations.filter(operation => operation.kind === 'merge-json');
+    assert.strictEqual(merges.length, 1, 'one MCP merge for the project file');
+    const [merge] = merges;
+    assert.strictEqual(merge.destinationPath, path.join(projectRoot, '.trae', 'mcp.json'));
+    assert.strictEqual(merge.moduleId, 'egc-mcp-servers');
+    assert.deepStrictEqual(Object.keys(merge.mergePayload.mcpServers).sort(), ['egc-guardian', 'egc-memory']);
+    for (const name of ['egc-guardian', 'egc-memory']) {
+      assert.deepStrictEqual(merge.mergePayload.mcpServers[name], {
+        command: 'node',
+        args: [path.join(repoRoot, 'mcp', 'servers', name, 'build', 'index.js')],
+        env: {},
+      }, `${name} names the node command, the absolute path of its build and an empty env`);
+    }
+  }));
+
   tally(test('resolves trae adapter root and install-state path from project root', () => {
     const adapter = getInstallTargetAdapter('trae');
     const projectRoot = '/workspace/app';

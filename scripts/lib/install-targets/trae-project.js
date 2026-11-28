@@ -4,11 +4,13 @@ const path = require('node:path');
 
 const {
   createInstallTargetAdapter,
+  createManagedOperation,
   createRemappedOperation,
   isForeignPlatformPath,
   normalizeModulesInput,
   resolveBaseRoot,
 } = require('./helpers');
+const { assertSafeMcpConfig, filterMcpConfig, parseDisabledMcpServers } = require('../mcp-config');
 const {
   createBashGuardianHookMergeOperationForDestination,
   createBashGuardianScriptCopyOperations,
@@ -24,6 +26,9 @@ const {
 const TRAE_DIR = '.trae';
 const TRAE_CN_DIR = '.trae-cn';
 const INSTALL_STATE_FILE = 'egc-install-state.json';
+const TRAE_MCP_CONFIG_FILE = 'mcp.json';
+const TRAE_MCP_MODULE_ID = 'egc-mcp-servers';
+const EGC_MCP_SERVERS = ['egc-guardian', 'egc-memory'];
 
 function canonicalPath(target) {
   try {
@@ -155,6 +160,38 @@ function createTraeMeshNoticeOperations(adapter, traeRoot) {
   ];
 }
 
+// Trae reads the MCP servers of a project from .trae/mcp.json once "Project
+// MCP" is enabled in Settings > MCP, in the standard mcpServers shape with
+// command, args and env (docs.trae.ai/ide/add-mcp-servers, read on
+// 2026-11-28); the global servers live in a file the Trae UI manages, at a
+// path the docs do not name, so only the project file is written, with the
+// absolute paths of this machine's servers, as the Devin project target
+// does. EGC_DISABLED_MCPS is applied at planning time, so the payload the
+// install state records already omits a disabled server.
+function createTraeMcpOperations(repoRoot, traeRoot) {
+  const payload = {
+    mcpServers: Object.fromEntries(EGC_MCP_SERVERS.map(name => [name, {
+      command: 'node',
+      args: [path.join(repoRoot, 'mcp', 'servers', name, 'build', 'index.js')],
+      env: {},
+    }])),
+  };
+  assertSafeMcpConfig(payload, 'the EGC MCP servers for Trae');
+  const disabled = parseDisabledMcpServers(process.env.EGC_DISABLED_MCPS || process.env.ECC_DISABLED_MCPS);
+  const mergePayload = filterMcpConfig(payload, disabled).config;
+  if (Object.keys(mergePayload.mcpServers).length === 0) return [];
+  return [createManagedOperation({
+    kind: 'merge-json',
+    moduleId: TRAE_MCP_MODULE_ID,
+    sourceRelativePath: '.mcp.json',
+    destinationPath: path.join(traeRoot, TRAE_MCP_CONFIG_FILE),
+    strategy: 'merge-json',
+    ownership: 'managed',
+    scaffoldOnly: false,
+    mergePayload,
+  })];
+}
+
 module.exports = createInstallTargetAdapter({
   id: 'trae-project',
   target: 'trae',
@@ -196,6 +233,7 @@ module.exports = createInstallTargetAdapter({
       ...createTraeGuardianOperations(adapter, traeRoot),
       ...createTraeCrusherOperations(adapter, traeRoot),
       ...createTraeMeshNoticeOperations(adapter, traeRoot),
+      ...createTraeMcpOperations(input.repoRoot, traeRoot),
     ];
   },
 });
