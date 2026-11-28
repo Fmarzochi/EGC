@@ -12,11 +12,44 @@ const fs = require('node:fs');
 const os = require('node:os');
 
 const { readTeamConfig } = require('./team-config');
-const { bridgeStatusPath, describeBridge, describeOnline, isLiveStatus, machineFilePath, meshConfigPath, normalizeCentralAddress, onlineCount, readJsonObject } = require('./mesh-status');
+const { bridgeStatusPath, centralKind, describeBridge, describeOnline, isLiveStatus, machineFilePath, meshConfigPath, normalizeCentralAddress, onlineCount, readJsonObject } = require('./mesh-status');
 
 const TEAM_KEY_PATTERN = /^[0-9a-f]{64}$/i;
 const CONFIG_PATH_SHOWN = '~/.egc/mesh.json';
 const SHORT_ID = 8;
+const CREDS_MARK = '-----BEGIN NATS USER JWT-----';
+
+// The credentials file as the bridge reads it (relay/link-nats.ts): a regular
+// file, not readable by other users where the mode is kept (a POSIX check),
+// holding a .creds file or JSON with a token, or with a user and a pass. The
+// reason the bridge would refuse it, or null when it would open it.
+function authFileProblem(file) {
+  let stat;
+  try {
+    stat = fs.lstatSync(file);
+  } catch {
+    return 'is gone';
+  }
+  if (!stat.isFile()) return 'is not a regular file';
+  if (process.platform !== 'win32' && (stat.mode & 0o077) !== 0) return 'is readable by other users (chmod 600 fixes it)';
+  let text;
+  try {
+    text = fs.readFileSync(file, 'utf8');
+  } catch {
+    return 'cannot be read';
+  }
+  if (text.includes(CREDS_MARK)) return null;
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    parsed = null;
+  }
+  const record = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+  if (record && typeof record.token === 'string' && record.token) return null;
+  if (record && typeof record.user === 'string' && record.user && typeof record.pass === 'string') return null;
+  return 'is neither a .creds file nor JSON with a token, or a user and a pass';
+}
 
 function readCentral(homeDir) {
   const file = meshConfigPath(homeDir);
@@ -25,7 +58,9 @@ function readCentral(homeDir) {
   // the machine without a bridge, so it is an unreadable configuration.
   const config = readJsonObject(file);
   const central = typeof config?.central === 'string' ? normalizeCentralAddress(config.central) : null;
-  return central ? { configured: true, unreadable: false, central } : { configured: true, unreadable: true, central: null };
+  // The credentials file of this machine on a NATS server, when the central is one.
+  const authFile = central && centralKind(central) === 'nats' && typeof config.authFile === 'string' && config.authFile ? config.authFile : null;
+  return central ? { configured: true, unreadable: false, central, authFile } : { configured: true, unreadable: true, central: null, authFile: null };
 }
 
 function readMachine(homeDir, status) {
@@ -42,30 +77,55 @@ function hasTeamKey(homeDir) {
 
 // Everything the block prints, from files alone; `now` is for the tests.
 function buildMeshReport(homeDir = os.homedir(), now = Date.now()) {
-  const { configured, unreadable, central } = readCentral(homeDir);
+  const { configured, unreadable, central, authFile } = readCentral(homeDir);
   const warnings = [];
-  if (!configured) return { configured, unreadable, central, machine: null, bridge: null, warnings, warningCount: 0 };
+  if (!configured) return { configured, unreadable, central, authFile, machine: null, bridge: null, warnings, warningCount: 0 };
   if (unreadable) {
-    warnings.push(`the mesh configuration at ${CONFIG_PATH_SHOWN} holds no address the mesh accepts (ws:// or wss://, a host, no user name): run egc mesh connect <address> again, or egc mesh disconnect to forget it`);
-    return { configured, unreadable, central, machine: null, bridge: null, warnings, warningCount: warnings.length };
+    warnings.push(`the mesh configuration at ${CONFIG_PATH_SHOWN} holds no address the mesh accepts (ws:// or wss:// for the central, nats:// or tls:// for a NATS server, a host, no user name): run egc mesh connect <address> again, or egc mesh disconnect to forget it`);
+    return { configured, unreadable, central, authFile, machine: null, bridge: null, warnings, warningCount: warnings.length };
   }
+  const { status, live, bridge } = readBridge(homeDir, now);
+  warnings.push(...bridgeWarnings(homeDir, central, authFile, bridge));
+  return { configured, unreadable, central, authFile, machine: readMachine(homeDir, live ? status : null), bridge, warnings, warningCount: warnings.length };
+}
+
+// The bridge as its status file says it is: live when the file is recent and
+// its process alive, and what the file holds then.
+function readBridge(homeDir, now) {
   const status = readJsonObject(bridgeStatusPath(homeDir));
   const live = isLiveStatus(status, now);
-  const bridge = {
+  return {
+    status,
     live,
-    pid: live ? status.pid : null,
-    connected: live ? status.connected === true : null,
-    central: live && typeof status.central === 'string' ? status.central : null,
-    online: onlineCount(status, live),
-    updatedAt: live ? status.updatedAt : null,
+    bridge: {
+      live,
+      pid: live ? status.pid : null,
+      connected: live ? status.connected === true : null,
+      central: live && typeof status.central === 'string' ? status.central : null,
+      online: onlineCount(status, live),
+      updatedAt: live ? status.updatedAt : null,
+    },
   };
+}
+
+// What keeps the bridge off, or down: no team key to prove itself with, a
+// credentials file the bridge will refuse, a connection that does not come.
+function bridgeWarnings(homeDir, central, authFile, bridge) {
+  const warnings = [];
   if (!hasTeamKey(homeDir)) {
     warnings.push('a central is configured and this machine has no team: the bridge cannot prove itself to the central; run egc team init --backend git --remote <url> --key <team key> (the key of the team the central serves)');
   }
-  if (live && bridge.central === central && bridge.connected === false) {
-    warnings.push(`the bridge is not connected to ${central}: check that egc mesh serve runs there and that the address is reachable from this machine`);
+  const authProblem = authFile ? authFileProblem(authFile) : null;
+  if (authProblem) {
+    warnings.push(`the credentials file ${authFile} that egc mesh connect --auth named ${authProblem}, so the bridge cannot open the NATS server: fix the file, or run egc mesh connect ${central} --auth <file> again`);
   }
-  return { configured, unreadable, central, machine: readMachine(homeDir, live ? status : null), bridge, warnings, warningCount: warnings.length };
+  if (bridge.live && bridge.central === central && bridge.connected === false) {
+    const credentials = authFile ? ', and that the credentials file still opens it' : '';
+    warnings.push(centralKind(central) === 'nats'
+      ? `the bridge is not connected to ${central}: check that your NATS server runs there and that the address is reachable from this machine${credentials}`
+      : `the bridge is not connected to ${central}: check that egc mesh serve runs there and that the address is reachable from this machine`);
+  }
+  return warnings;
 }
 
 function printWarnings(report, print) {
@@ -85,10 +145,11 @@ function printMeshReport(report, print = console.log) {
     return;
   }
   const machine = report.machine ? `, this machine ${report.machine.label} (${report.machine.id.slice(0, SHORT_ID)})` : '';
-  print(`\nMesh: central ${report.central}${machine}`);
+  print(`\nMesh: ${centralKind(report.central) === 'nats' ? 'NATS server' : 'central'} ${report.central}${machine}`);
   const status = report.bridge.live ? { pid: report.bridge.pid, central: report.bridge.central, connected: report.bridge.connected, online: new Array(report.bridge.online).fill('') } : null;
   print(`  Bridge: ${describeBridge(status, report.bridge.live, report.central)}`);
   print(`  Online: ${describeOnline(status, report.bridge.live)}`);
+  if (report.authFile) print(`  Auth:   ${report.authFile}`);
   printWarnings(report, print);
 }
 

@@ -150,6 +150,30 @@ function runTests() {
       assert.strictEqual(report.warningCount, 1);
       assert.ok(lines(report).includes('[WARNING] a central is configured and this machine has no team'), lines(report));
     })),
+
+    test('a NATS server as the central is named as such, with its credentials file, and its warnings speak of the server', () => withHome(home => {
+      const authFile = path.join(home, 'nats-auth.json');
+      fs.writeFileSync(authFile, JSON.stringify({ token: 'synthetic' }), { mode: 0o600 });
+      fs.writeFileSync(path.join(home, '.egc', 'mesh.json'), JSON.stringify({ central: 'nats://broker.example.com:4222', authFile, connectedAt: '2026-11-27T10:00:00.000Z' }));
+      withTeam(home);
+      let report = buildMeshReport(home);
+      assert.strictEqual(report.warningCount, 0, lines(report));
+      assert.strictEqual(report.authFile, authFile);
+      let text = lines(report);
+      assert.ok(text.includes('Mesh: NATS server nats://broker.example.com:4222'), text);
+      assert.ok(text.includes(`Auth:   ${authFile}`), text);
+      writeBridge(home, { central: 'nats://broker.example.com:4222', connected: false, online: [] });
+      report = buildMeshReport(home);
+      assert.strictEqual(report.warningCount, 1, lines(report));
+      assert.ok(lines(report).includes('check that your NATS server runs there'), lines(report));
+      fs.rmSync(authFile);
+      report = buildMeshReport(home);
+      assert.strictEqual(report.warningCount, 2, lines(report));
+      text = lines(report);
+      assert.ok(text.includes(`[WARNING] the credentials file ${authFile} that egc mesh connect --auth named is gone`), text);
+      fs.writeFileSync(path.join(home, '.egc', 'mesh.json'), JSON.stringify({ central: 'wss://mesh.example.com:47470', authFile }));
+      assert.strictEqual(buildMeshReport(home).authFile, null, 'a credentials file means nothing to the central');
+    })),
   ];
 
   const passed = results.filter(Boolean).length;

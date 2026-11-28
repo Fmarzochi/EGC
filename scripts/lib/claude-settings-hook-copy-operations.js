@@ -423,6 +423,11 @@ const SESSION_HOOK_LIB_SOURCES = [
   'scripts/lib/project-detect.js',
   'scripts/lib/propagate-state.js',
   'scripts/lib/state-crypto.js',
+  // The state consolidation the session loader runs when it finds them: a
+  // state file past the threshold is backed up and compacted on the host
+  // the way it is where the hooks run from the repository.
+  'scripts/lib/auto-consolidate.js',
+  'scripts/lib/state-consolidate.js',
   'scripts/lib/learning-store.js',
   'scripts/lib/team-config.js',
   'scripts/lib/team-autosync.js',

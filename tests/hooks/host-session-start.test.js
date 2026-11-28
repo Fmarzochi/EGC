@@ -24,7 +24,7 @@ const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 const REPO_ROOT = path.join(__dirname, '..', '..');
 const HOOKS = path.join(REPO_ROOT, 'scripts', 'hooks');
 const STOP = path.join(HOOKS, 'team-sync-stop.js');
-const HOSTS = ['qwen', 'codebuddy', 'junie', 'auggie', 'goose', 'droid', 'devin', 'kimi', 'vibe', 'crush'];
+const HOSTS = ['qwen', 'codebuddy', 'junie', 'auggie', 'goose', 'droid', 'openhands', 'devin', 'kimi', 'vibe', 'crush'];
 
 let passed = 0;
 let failed = 0;
@@ -130,6 +130,7 @@ const payloads = {
   auggie: { hook_event_name: 'SessionStart', conversation_id: 'auggie-1', workspace_roots: [project], cwd: elsewhere },
   goose: { event: 'SessionStart', session_id: 'goose-1', working_dir: project },
   droid: { session_id: 'droid-1', transcript_path: '', cwd: project, permission_mode: 'default', hook_event_name: 'SessionStart', source: 'startup' },
+  openhands: { event_type: 'session_start', session_id: 'openhands-1', working_dir: project },
   devin: { hook_event_name: 'SessionStart', session_id: 'devin-1', source: 'startup' },
   kimi: { hook_event_name: 'SessionStart', session_id: 'kimi-1', session_title: 'demo', client_type: 'cli', cwd: project },
   vibe: { session_id: 'vibe-1', parent_session_id: null, transcript_path: '', cwd: project, hook_event_name: 'session_start', source: 'startup', agent_name: 'default', model: 'devstral' },

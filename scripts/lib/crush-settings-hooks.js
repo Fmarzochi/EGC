@@ -86,14 +86,6 @@ function resolveCrushGuardianAdapterDestination(targetRoot) {
   return path.join(targetRoot, 'scripts', 'hooks', 'crush-guardian-adapter.js');
 }
 
-/**
- * Adds or updates a hook entry in the Crush configuration object.
- * @param {Record<string, unknown>} config
- * @param {string} event
- * @param {string} command
- * @param {string} [matcher]
- * @returns {{config: Record<string, unknown>, changed: boolean}}
- */
 // Whether an entry carries the matcher an operation wants: the same string
 // for a tool event, none at all for a session event, so a session entry left
 // with a matcher by hand is not the entry EGC writes.
@@ -108,6 +100,14 @@ function shapedEntry(entry, command, matcher) {
   return matcher === undefined ? { ...rest, command } : { ...rest, matcher, command };
 }
 
+/**
+ * Adds or updates a hook entry in the Crush configuration object.
+ * @param {Record<string, unknown>} config
+ * @param {string} event
+ * @param {string} command
+ * @param {string} [matcher]
+ * @returns {{config: Record<string, unknown>, changed: boolean}}
+ */
 function addCrushHookEntry(config, event, command, matcher) {
   const base = isPlainObject(config) ? config : {};
   const hooks = isPlainObject(base.hooks) ? { ...base.hooks } : {};

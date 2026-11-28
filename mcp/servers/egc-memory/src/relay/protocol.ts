@@ -85,7 +85,7 @@ export function isBox(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= MAX_BOX_BYTES && value.length % 4 === 0 && BASE64_RE.test(value);
 }
 
-function isAddress(value: unknown): value is string {
+export function isAddress(value: unknown): value is string {
   return value === BROADCAST || isHexId(value);
 }
 

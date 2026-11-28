@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
+    "@nats-io/transport-node": "~3.4.0",
     "bonjour-service": "^1.4.4",
     "simple-git": "^4.1.0",
     "sqlite": "^5.1.1",

@@ -28,23 +28,32 @@ const DEFAULT_CENTRAL_PORT = 47470;
 
 // The rules of normalizeCentralAddress in relay/mesh-config.ts, kept here
 // so the doctor judges an address as the runtime does without the built
-// server: ws:// or wss:// with a host and no user name or password; a bare
-// host is read as ws:// and gets the port of the central.
+// server: ws:// or wss:// (the central) or nats:// or tls:// (a NATS server)
+// with a host and no user name or password; a bare host is read as ws://
+// and gets the port of the central.
 function normalizeCentralAddress(value) {
   const text = String(value ?? '').trim();
   if (!text) return null;
   const scheme = /^([a-z][a-z0-9+.-]*):\/\//i.exec(text);
-  if (scheme && !/^wss?$/i.test(scheme[1])) return null;
+  if (scheme && !/^(?:wss?|nats|tls)$/i.test(scheme[1])) return null;
   let url;
   try {
     url = new URL(scheme ? text : `ws://${text}`);
   } catch {
     return null;
   }
-  if (!/^wss?:$/.test(url.protocol) || !url.hostname) return null;
+  if (!/^(?:wss?|nats|tls):$/.test(url.protocol) || !url.hostname) return null;
   if (url.username || url.password) return null;
+  // A NATS address is host and port alone: credentials come from --auth.
+  if (/^(?:nats|tls):$/.test(url.protocol) && (url.search || url.hash || (url.pathname && url.pathname !== '/'))) return null;
   if (!scheme && !url.port) url.port = String(DEFAULT_CENTRAL_PORT);
   return url.toString().replace(/\/$/, '');
+}
+
+// What the address points at: the central of egc mesh serve, or a NATS
+// server, which runs nothing of EGC and tells nobody who comes and goes.
+function centralKind(central) {
+  return /^(?:nats|tls):\/\//i.test(String(central ?? '')) ? 'nats' : 'relay';
 }
 
 // The JSON object a regular file holds, or null when there is no such file,
@@ -99,6 +108,7 @@ module.exports = {
   LIVE_WINDOW_MS,
   DEFAULT_CENTRAL_PORT,
   normalizeCentralAddress,
+  centralKind,
   meshConfigPath,
   bridgeStatusPath,
   machineFilePath,

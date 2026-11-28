@@ -166,6 +166,14 @@ class WasmDatabase {
   }
 
   async all(sql, ...params) {
+    // A statement the classifier counts as a write (a DELETE or UPDATE with
+    // RETURNING is the one that comes through here) is a write first: it
+    // runs under the write lock and is persisted, as run() does, so the rows
+    // it returns are the rows that left the file. A reporting pragma such as
+    // table_info(...) is a read for the classifier and takes no lock.
+    if (mutates(sql) && !this._inTransaction) {
+      return this.withWriteLock(() => this.readRows(sql, params));
+    }
     if (this.filename !== ':memory:' && !this._inTransaction && fs.existsSync(this.filename)) {
       try {
         const currentStat = fs.statSync(this.filename);
@@ -179,6 +187,10 @@ class WasmDatabase {
         }
       } catch (_) { /* ignore stat error */ }
     }
+    return this.readRows(sql, params);
+  }
+
+  readRows(sql, params) {
     const statement = this.db.prepare(sql);
     try {
       const bound = normalizeParams(params);

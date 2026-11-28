@@ -15,13 +15,18 @@ const path = require('path');
 
 const {
   PRE_TOOL_USE_EVENT,
+  SESSION_START_EVENT,
+  STOP_EVENT,
   TERMINAL_MATCHER,
   addOpenHandsHookEntry,
   applyOpenHandsGuardianHookToFile,
+  applyOpenHandsHookToFile,
   buildHookCommand,
   inspectOpenHandsGuardianHookFile,
+  inspectOpenHandsHookFile,
   removeOpenHandsGuardianHookFromFile,
   removeOpenHandsHookEntry,
+  removeOpenHandsHookFromFile,
   resolveGuardianAdapterScriptDestination,
   resolveHooksJsonPath,
 } = require('../../scripts/lib/openhands-guardian-hooks');
@@ -268,6 +273,31 @@ function runTests() {
 
       fs.writeFileSync(hooksJsonPath, JSON.stringify({ [PRE_TOOL_USE_EVENT]: 'not-an-array' }));
       assert.strictEqual(inspectOpenHandsGuardianHookFile(hooksJsonPath, '/abs/adapter.js'), 'drifted');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  }));
+
+  tally(test('the session hooks go under session_start and stop with no matcher, once each, beside the Guardian group, and leave without touching it', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'openhands-hooks-session-'));
+    const hooksJsonPath = path.join(tempDir, 'hooks.json');
+    try {
+      applyOpenHandsGuardianHookToFile(hooksJsonPath, '/abs/adapter.js');
+      assert.strictEqual(applyOpenHandsHookToFile(hooksJsonPath, '/abs/session-start.js', SESSION_START_EVENT).changed, true);
+      assert.strictEqual(applyOpenHandsHookToFile(hooksJsonPath, '/abs/team-sync-stop.js', STOP_EVENT).changed, true);
+      applyOpenHandsHookToFile(hooksJsonPath, '/abs/session-start.js', SESSION_START_EVENT);
+      const onDisk = JSON.parse(fs.readFileSync(hooksJsonPath, 'utf8'));
+      assert.deepStrictEqual(onDisk[SESSION_START_EVENT], [{ hooks: [{ type: 'command', command: buildHookCommand('/abs/session-start.js') }] }], 'one group, no matcher key, written once');
+      assert.deepStrictEqual(onDisk[STOP_EVENT], [{ hooks: [{ type: 'command', command: buildHookCommand('/abs/team-sync-stop.js') }] }]);
+      assert.strictEqual(onDisk[PRE_TOOL_USE_EVENT][0].matcher, TERMINAL_MATCHER, 'the Guardian group keeps its matcher');
+      assert.strictEqual(inspectOpenHandsHookFile(hooksJsonPath, '/abs/session-start.js', SESSION_START_EVENT), 'ok');
+      assert.strictEqual(inspectOpenHandsHookFile(hooksJsonPath, '/abs/other.js', SESSION_START_EVENT), 'drifted');
+      assert.strictEqual(removeOpenHandsHookFromFile(hooksJsonPath, '/abs/session-start.js', SESSION_START_EVENT).changed, true);
+      const after = JSON.parse(fs.readFileSync(hooksJsonPath, 'utf8'));
+      assert.strictEqual(SESSION_START_EVENT in after, false, 'an emptied event leaves the file');
+      assert.deepStrictEqual(after[STOP_EVENT], onDisk[STOP_EVENT]);
+      assert.deepStrictEqual(after[PRE_TOOL_USE_EVENT], onDisk[PRE_TOOL_USE_EVENT]);
+      assert.strictEqual(inspectOpenHandsGuardianHookFile(hooksJsonPath, '/abs/adapter.js'), 'ok');
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }

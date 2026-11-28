@@ -58,9 +58,14 @@ const {
 } = require('./amazonq-guardian-hooks');
 const {
   PRE_TOOL_USE_EVENT: OPENHANDS_PRE_TOOL_USE_EVENT,
+  SESSION_START_EVENT: OPENHANDS_SESSION_START_EVENT,
+  STOP_EVENT: OPENHANDS_STOP_EVENT,
   applyOpenHandsGuardianHookToFile,
+  applyOpenHandsHookToFile,
   inspectOpenHandsGuardianHookFile,
+  inspectOpenHandsHookFile,
   removeOpenHandsGuardianHookFromFile,
+  removeOpenHandsHookFromFile,
 } = require('./openhands-guardian-hooks');
 const {
   ANTIGRAVITY_GUARDIAN_HOOK_TAG,
@@ -239,6 +244,19 @@ const HOOK_EVENT_OPERATION_HANDLERS = {
     apply: operation => applyOpenHandsGuardianHookToFile(operation.destinationPath, operation.hookScriptPath),
     remove: operation => removeOpenHandsGuardianHookFromFile(operation.destinationPath, operation.hookScriptPath),
     inspect: operation => inspectOpenHandsGuardianHookFile(operation.destinationPath, operation.hookScriptPath),
+  },
+  // The session hooks of OpenHands, in the same hooks.json and shape, under
+  // the snake_case events of that file and with no matcher: session_start
+  // restores the project memory, stop pushes the Team Brain.
+  [OPENHANDS_SESSION_START_EVENT]: {
+    apply: operation => applyOpenHandsHookToFile(operation.destinationPath, operation.hookScriptPath, OPENHANDS_SESSION_START_EVENT),
+    remove: operation => removeOpenHandsHookFromFile(operation.destinationPath, operation.hookScriptPath, OPENHANDS_SESSION_START_EVENT),
+    inspect: operation => inspectOpenHandsHookFile(operation.destinationPath, operation.hookScriptPath, OPENHANDS_SESSION_START_EVENT),
+  },
+  [OPENHANDS_STOP_EVENT]: {
+    apply: operation => applyOpenHandsHookToFile(operation.destinationPath, operation.hookScriptPath, OPENHANDS_STOP_EVENT),
+    remove: operation => removeOpenHandsHookFromFile(operation.destinationPath, operation.hookScriptPath, OPENHANDS_STOP_EVENT),
+    inspect: operation => inspectOpenHandsHookFile(operation.destinationPath, operation.hookScriptPath, OPENHANDS_STOP_EVENT),
   },
   [ANTIGRAVITY_GUARDIAN_HOOK_TAG]: {
     // EGC owns the whole egc-guardian named hook in Antigravity's hooks.json,

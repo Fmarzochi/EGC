@@ -4,13 +4,19 @@ import path from 'node:path';
 import { resolveHome } from '../home';
 import { privateJson, writePrivateFile } from './private-file';
 
-// Where this machine's bridge finds the central: ~/.egc/mesh.json, written
-// by `egc mesh connect <address>` and read by the memory server when it
-// starts. No file, no central: the machine works alone, as it always did.
+// Where this machine's bridge finds what relays for its team: ~/.egc/mesh.json,
+// written by `egc mesh connect <address>` and read by the memory server when
+// it starts. The address is the central of egc mesh serve (ws:// or wss://)
+// or a NATS server the person runs (nats:// or tls://), with the credentials
+// file of this machine on that server when it asks for one. No file, no
+// central: the machine works alone, as it always did.
 export interface MeshConfig {
   central: string;
   connectedAt: string;
+  authFile: string | null;
 }
+
+export type CentralKind = 'relay' | 'nats';
 
 export function meshConfigPath(home: string = resolveHome()): string {
   return path.join(home, '.egc', 'mesh.json');
@@ -18,17 +24,30 @@ export function meshConfigPath(home: string = resolveHome()): string {
 
 export const DEFAULT_CENTRAL_PORT = 47470;
 
-// A WebSocket address with a host. A bare host, or host:port, is read as
-// ws:// and a host alone gets the port of the central (47470); a ws:// or
-// wss:// URL is taken as written, so a central behind a proxy keeps the port
-// of its scheme. An address that names another scheme (http://, for one) is
-// refused rather than read as a host called "http", and so is one that
-// carries a user name or a password, which would end up in every status line.
+const RELAY_SCHEME = /^wss?$/i;
+const NATS_SCHEME = /^(?:nats|tls)$/i;
+
+// What an address of the mesh points at: the central of egc mesh serve, or a
+// NATS server.
+export function centralKind(central: string): CentralKind {
+  return /^(?:nats|tls):\/\//i.test(central) ? 'nats' : 'relay';
+}
+
+// An address with a host. A bare host, or host:port, is read as ws:// and a
+// host alone gets the port of the central (47470); a ws:// or wss:// URL is
+// taken as written, so a central behind a proxy keeps the port of its scheme;
+// a nats:// or tls:// URL names a NATS server by host and port alone (the
+// library gives it the port of NATS, 4222, when none is given): a path, a
+// query or a fragment is refused, since credentials come from --auth and
+// never from the address. An address that names another scheme (http://,
+// for one) is refused rather than read as a host called "http", and so is
+// one that carries a user name or a password, which would end up in every
+// status line.
 export function normalizeCentralAddress(value: string): string | null {
   const text = String(value ?? '').trim();
   if (!text) return null;
   const scheme = /^([a-z][a-z0-9+.-]*):\/\//i.exec(text);
-  if (scheme && !/^wss?$/i.test(scheme[1])) return null;
+  if (scheme && !RELAY_SCHEME.test(scheme[1]) && !NATS_SCHEME.test(scheme[1])) return null;
   const candidate = scheme ? text : `ws://${text}`;
   let url: URL;
   try {
@@ -36,10 +55,19 @@ export function normalizeCentralAddress(value: string): string | null {
   } catch {
     return null;
   }
-  if (!/^wss?:$/.test(url.protocol) || !url.hostname) return null;
+  if (!/^(?:wss?|nats|tls):$/.test(url.protocol) || !url.hostname) return null;
   if (url.username || url.password) return null;
+  if (NATS_SCHEME.test(url.protocol.slice(0, -1)) && (url.search || url.hash || (url.pathname && url.pathname !== '/'))) return null;
   if (!scheme && !url.port) url.port = String(DEFAULT_CENTRAL_PORT);
   return url.toString().replace(/\/$/, '');
+}
+
+function isRegularFile(file: string): boolean {
+  try {
+    return fs.lstatSync(file).isFile();
+  } catch {
+    return false;
+  }
 }
 
 export function readMeshConfig(home: string = resolveHome()): MeshConfig | null {
@@ -57,13 +85,33 @@ export function readMeshConfig(home: string = resolveHome()): MeshConfig | null 
   const record = parsed as Record<string, unknown>;
   const central = typeof record.central === 'string' ? normalizeCentralAddress(record.central) : null;
   if (!central) return null;
-  return { central, connectedAt: typeof record.connectedAt === 'string' ? record.connectedAt : new Date(0).toISOString() };
+  // A credentials file means nothing to the central of egc mesh serve.
+  const authFile = centralKind(central) === 'nats' && typeof record.authFile === 'string' && record.authFile.length > 0 ? record.authFile : null;
+  return { central, connectedAt: typeof record.connectedAt === 'string' ? record.connectedAt : new Date(0).toISOString(), authFile };
 }
 
-export function writeMeshConfig(central: string, home: string = resolveHome()): MeshConfig {
+export interface WriteMeshConfigOptions {
+  // The credentials file of this machine on a NATS server, kept by its
+  // absolute path; the file itself stays where the person put it. `null`
+  // forgets the one kept; left out, the one kept stays while the central is
+  // the same, so a join through the pairing, which writes the central and
+  // nothing else, does not lose the credentials of the machine.
+  authFile?: string | null;
+}
+
+function keptAuthFile(home: string, central: string): string | null {
+  const current = readMeshConfig(home);
+  return current && current.central === central ? current.authFile : null;
+}
+
+export function writeMeshConfig(central: string, home: string = resolveHome(), options: WriteMeshConfigOptions = {}): MeshConfig {
   const normalized = normalizeCentralAddress(central);
-  if (!normalized) throw new Error(`Not an address of a mesh central: ${central}. Give a host and a port, such as 192.168.1.50:47470, or a ws:// or wss:// URL, without a user name or a password in it.`);
-  const config: MeshConfig = { central: normalized, connectedAt: new Date().toISOString() };
+  if (!normalized) throw new Error(`Not an address of a mesh central: ${central}. Give a host and a port, such as 192.168.1.50:47470, a ws:// or wss:// URL of the central, or a nats:// or tls:// URL of your NATS server, without a user name or a password in it.`);
+  const requested = options.authFile === undefined ? keptAuthFile(home, normalized) : options.authFile;
+  const authFile = requested ? path.resolve(requested) : null;
+  if (authFile && centralKind(normalized) !== 'nats') throw new Error('A credentials file (--auth) goes with the address of a NATS server (nats:// or tls://); the central of egc mesh serve takes the team key alone.');
+  if (authFile && !isRegularFile(authFile)) throw new Error(`The credentials file ${authFile} does not exist or is not a regular file.`);
+  const config: MeshConfig = { central: normalized, connectedAt: new Date().toISOString(), authFile };
   writePrivateFile(meshConfigPath(home), privateJson(config));
   return config;
 }
