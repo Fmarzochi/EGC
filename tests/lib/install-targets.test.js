@@ -6103,10 +6103,15 @@ function runTests() {
       ['scripts', 'hooks', 'pre-bash-guardian-validate.js'],
       ['scripts', 'hooks', 'pre-write-guardian-validate.js'],
       ['scripts', 'hooks', 'crusher-hook.js'],
+      ['scripts', 'hooks', 'droid-session-start.js'],
+      ['scripts', 'hooks', 'team-sync-stop.js'],
+      ['scripts', 'hooks', 'mesh-events-inject.js'],
     ]) {
       assert.ok(destinations.includes(path.join(root, ...expected)), `${expected.join('/')} is planned`);
     }
     assert.ok(!destinations.some(destination => destination.startsWith(path.join(root, 'droids'))), 'no Markdown agent lands among the custom droids');
+    const copies = plan.operations.filter(op => op.kind !== 'merge-claude-settings-hooks').map(op => op.destinationPath);
+    assert.strictEqual(new Set(copies).size, copies.length, 'no file is planned twice: the mesh notice script comes alone, its team sync already travels with the session hooks');
     const hooks = plan.operations.filter(op => op.destinationPath === path.join(root, 'settings.json'));
     assert.deepStrictEqual(hooks.map(op => [op.moduleId, op.hookEvent, op.hookMatcher]), [
       ['egc-bash-guardian-hook', 'PreToolUse', 'Execute'],
@@ -6114,7 +6119,10 @@ function runTests() {
       ['egc-crusher-hook', 'PreToolUse', 'Execute'],
       ['egc-host-session-hook', 'SessionStart', undefined],
       ['egc-host-session-hook', 'Stop', undefined],
+      ['egc-mesh-notice-hook', 'UserPromptSubmit', undefined],
     ]);
+    const notice = hooks.find(op => op.hookEvent === 'UserPromptSubmit');
+    assert.strictEqual(notice.hookScriptPath, path.join(root, 'scripts', 'hooks', 'mesh-events-inject.js'), 'the UserPromptSubmit entry runs the shared notice script under the Droid root');
   }));
 
   tally(test('droid-home warns when ~/.factory is absent, naming the tool and its docs (#1493)', () => {

@@ -20,7 +20,10 @@ const WRITE_MATCHER = 'Edit|Create|ApplyPatch';
 // 2026-11-27): SessionStart gets session_id and cwd and reads
 // additionalContext back into the context, so the project memory reaches the
 // session and the Team Brain is pulled when the team asks for it; Stop pushes
-// what changed.
+// what changed. The Session Mesh notice rides UserPromptSubmit, whose stdout
+// (plain text or additionalContext on exit 0) is added as context for the
+// model (same reference, read on 2026-11-28): the shared mesh-events-inject.js
+// runs alone, with no team sync beside it, since the session hooks carry it.
 const DROID_SESSION_START_SOURCE_RELATIVE_PATH = 'scripts/hooks/droid-session-start.js';
 
 function planDroidPath(adapter, module, sourceRelativePath, planningInput, targetRoot) {
@@ -42,6 +45,9 @@ function createDroidHookOperations(adapter, targetRoot) {
     createWriteValidatorHookMergeOperationForDestination,
     createWriteValidatorScriptCopyOperation,
     createHostSessionHookOperations,
+    createMeshNoticeHookMergeOperationForDestination,
+    createMeshNoticeScriptCopyOperations,
+    resolveMeshNoticeHookScriptDestination,
   } = require('../claude-settings-hooks');
   const remap = (moduleId, sourceRelativePath, destinationPath, options) => (
     createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
@@ -65,6 +71,8 @@ function createDroidHookOperations(adapter, targetRoot) {
       sessionStartSourceRelativePath: DROID_SESSION_START_SOURCE_RELATIVE_PATH,
       plannedDestinations: new Set(gates.map(operation => operation.destinationPath)),
     }),
+    ...createMeshNoticeScriptCopyOperations(remap, targetRoot, { withTeamSync: false }),
+    createMeshNoticeHookMergeOperationForDestination(settingsPath, resolveMeshNoticeHookScriptDestination(targetRoot)),
   ];
 }
 
