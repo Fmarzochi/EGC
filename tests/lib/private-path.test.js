@@ -39,31 +39,35 @@ const results = [
     assert.strictEqual(windowsAccount({ USERNAME: 'ana' }), 'ana');
   }),
 
-  test('the icacls calls reset the list, then remove the inherited entries and grant the account alone, inherited on a directory', () => {
+  test('the icacls calls remove the inherited entries and grant the account alone; a directory, which may exist from before, has its list reset first', () => {
     assert.deepStrictEqual(
       privateAclCommands('C:\\Users\\ana\\.egc\\team.json', false, 'CASA\\ana'),
+      [['icacls', ['C:\\Users\\ana\\.egc\\team.json', '/inheritance:r', '/grant:r', 'CASA\\ana:F']]]
+    );
+    assert.deepStrictEqual(
+      privateAclCommands('C:\\Users\\ana\\.egc', true, 'ana'),
       [
-        ['icacls', ['C:\\Users\\ana\\.egc\\team.json', '/reset']],
-        ['icacls', ['C:\\Users\\ana\\.egc\\team.json', '/inheritance:r', '/grant:r', 'CASA\\ana:F']],
+        ['icacls', ['C:\\Users\\ana\\.egc', '/reset']],
+        ['icacls', ['C:\\Users\\ana\\.egc', '/inheritance:r', '/grant:r', 'ana:(OI)(CI)F']],
       ]
     );
-    assert.strictEqual(privateAclCommands('C:\\Users\\ana\\.egc', true, 'ana')[1][1][3], 'ana:(OI)(CI)F');
   }),
 
-  test('on Windows makePrivate runs both icacls calls with a timeout and the account of the environment, and reports a refusal or a missing icacls as false', () => {
+  test('on Windows makePrivate runs every icacls call with a timeout and the account of the environment, and reports a refusal or a missing icacls as false', () => {
     const calls = [];
     const run = (command, args, options) => { calls.push([command, args, options]); return { status: 0 }; };
     const env = { USERNAME: 'ana', USERDOMAIN: 'CASA' };
     assert.strictEqual(makePrivate('C:\\x\\team.json', 0o600, { platform: 'win32', run, env }), true);
-    assert.strictEqual(calls.length, 2);
-    assert.deepStrictEqual(calls[0].slice(0, 2), ['icacls', ['C:\\x\\team.json', '/reset']]);
-    assert.deepStrictEqual(calls[1].slice(0, 2), ['icacls', ['C:\\x\\team.json', '/inheritance:r', '/grant:r', 'CASA\\ana:F']]);
-    assert.strictEqual(calls[1][2].timeout, ACL_TIMEOUT_MS);
+    assert.strictEqual(calls.length, 1);
+    assert.deepStrictEqual(calls[0].slice(0, 2), ['icacls', ['C:\\x\\team.json', '/inheritance:r', '/grant:r', 'CASA\\ana:F']]);
     assert.strictEqual(makePrivate('C:\\x', 0o700, { platform: 'win32', directory: true, run, env }), true);
-    assert.strictEqual(calls[3][1][3], 'CASA\\ana:(OI)(CI)F');
+    assert.strictEqual(calls.length, 3);
+    assert.deepStrictEqual(calls[1].slice(0, 2), ['icacls', ['C:\\x', '/reset']]);
+    assert.strictEqual(calls[2][1][3], 'CASA\\ana:(OI)(CI)F');
+    assert.ok(calls.every(call => call[2].timeout === ACL_TIMEOUT_MS), 'the reset and the grants alike are bounded');
     let attempts = 0;
-    assert.strictEqual(makePrivate('C:\\x\\team.json', 0o600, { platform: 'win32', env, run: () => ({ status: attempts++ === 0 ? 0 : 5 }) }), false, 'a refused grant');
-    assert.strictEqual(makePrivate('C:\\x\\team.json', 0o600, { platform: 'win32', env, run: () => ({ status: 5 }) }), false, 'a refused reset');
+    assert.strictEqual(makePrivate('C:\\x', 0o700, { platform: 'win32', directory: true, env, run: () => ({ status: attempts++ === 0 ? 0 : 5 }) }), false, 'a grant refused after the reset');
+    assert.strictEqual(makePrivate('C:\\x\\team.json', 0o600, { platform: 'win32', env, run: () => ({ status: 5 }) }), false, 'a refused grant');
     assert.strictEqual(makePrivate('C:\\x\\team.json', 0o600, { platform: 'win32', env, run: () => { throw new Error('no icacls'); } }), false, 'a missing icacls');
   }),
 

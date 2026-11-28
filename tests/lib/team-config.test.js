@@ -79,31 +79,32 @@ function runTests() {
       assert.strictEqual(windowsAccount({ USERNAME: 'ana' }), 'ana', 'the user alone otherwise');
       assert.deepStrictEqual(
         privateAclCommands('C:\\Users\\ana\\.egc\\team.json', { account: 'CASA\\ana' }),
-        [
-          ['icacls', ['C:\\Users\\ana\\.egc\\team.json', '/reset']],
-          ['icacls', ['C:\\Users\\ana\\.egc\\team.json', '/inheritance:r', '/grant:r', 'CASA\\ana:F']],
-        ],
-        'a file: the list reset first, so explicit entries go too, then inheritance removed and one full-control entry'
+        [['icacls', ['C:\\Users\\ana\\.egc\\team.json', '/inheritance:r', '/grant:r', 'CASA\\ana:F']]],
+        'a file this write just created: inheritance removed and one full-control entry, nothing to reset'
       );
-      assert.strictEqual(
-        privateAclCommands('C:\\Users\\ana\\.egc', { directory: true, account: 'ana' })[1][1][3],
-        'ana:(OI)(CI)F',
-        'a directory: the entry is inherited by what it will hold'
+      assert.deepStrictEqual(
+        privateAclCommands('C:\\Users\\ana\\.egc', { directory: true, account: 'ana' }),
+        [
+          ['icacls', ['C:\\Users\\ana\\.egc', '/reset']],
+          ['icacls', ['C:\\Users\\ana\\.egc', '/inheritance:r', '/grant:r', 'ana:(OI)(CI)F']],
+        ],
+        'a directory that may exist from before: the list reset first, so explicit entries go too, then the entry inherited by what it will hold'
       );
       const calls = [];
       const run = (command, args, options) => { calls.push([command, args, options]); return { status: 0 }; };
       assert.strictEqual(makePrivate('C:\\x\\team.json', 0o600, { platform: 'win32', run }), true);
-      assert.strictEqual(calls.length, 2, 'the reset and the grant, one call each');
+      assert.strictEqual(calls.length, 1, 'one call for a file');
       assert.strictEqual(calls[0][0], 'icacls');
-      assert.deepStrictEqual(calls[0][1], ['C:\\x\\team.json', '/reset']);
-      assert.strictEqual(calls[1][1][3].endsWith(':F'), true);
-      assert.strictEqual(calls[1][2].timeout, 5000, 'a stalled icacls is given up, so the write never hangs on it');
+      assert.strictEqual(calls[0][1][3].endsWith(':F'), true);
       assert.strictEqual(makePrivate('C:\\x', 0o700, { platform: 'win32', directory: true, run }), true);
-      assert.strictEqual(calls[3][1][3].endsWith(':(OI)(CI)F'), true, 'the directory call carries the inheritance flags');
+      assert.strictEqual(calls.length, 3, 'the reset and the grant for a directory');
+      assert.deepStrictEqual(calls[1][1], ['C:\\x', '/reset']);
+      assert.strictEqual(calls[2][1][3].endsWith(':(OI)(CI)F'), true, 'the directory call carries the inheritance flags');
+      assert.ok(calls.every(call => call[2].timeout === 5000), 'every icacls call is given up after five seconds, so the write never hangs on it');
       let attempts = 0;
       const refuseSecond = () => ({ status: attempts++ === 0 ? 0 : 5 });
-      assert.strictEqual(makePrivate('C:\\x\\team.json', 0o600, { platform: 'win32', run: refuseSecond }), false, 'a refused grant is reported, not thrown');
-      assert.strictEqual(makePrivate('C:\\x\\team.json', 0o600, { platform: 'win32', run: () => ({ status: 5 }) }), false, 'a refused reset is reported, not thrown');
+      assert.strictEqual(makePrivate('C:\\x', 0o700, { platform: 'win32', directory: true, run: refuseSecond }), false, 'a grant refused after the reset is reported, not thrown');
+      assert.strictEqual(makePrivate('C:\\x\\team.json', 0o600, { platform: 'win32', run: () => ({ status: 5 }) }), false, 'a refused grant is reported, not thrown');
       assert.strictEqual(makePrivate('C:\\x\\team.json', 0o600, { platform: 'win32', run: () => { throw new Error('no icacls'); } }), false, 'a missing icacls is reported, not thrown');
     }),
 

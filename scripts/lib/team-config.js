@@ -68,16 +68,15 @@ function windowsAccount(env = process.env) {
   return env.USERDOMAIN ? `${env.USERDOMAIN}\\${user}` : user;
 }
 
-// The icacls calls that leave one account on a file or a directory: first the
-// access list reset to what the parent hands down, so an explicit entry
-// someone added before goes too, then the inherited entries removed and one
-// full-control entry for the account, on a directory inherited by what the
-// directory will hold.
+// The icacls calls that leave one account on a file or a directory: the
+// inherited entries removed and one full-control entry for the account. A
+// directory may exist from before with entries someone added, so its list is
+// reset to what the parent hands down first and the entry is inherited by
+// what the directory will hold; a file comes through here only when this
+// write just created it, so there is nothing on it to reset.
 function privateAclCommands(target, { directory = false, account = windowsAccount() } = {}) {
-  return [
-    ['icacls', [target, '/reset']],
-    ['icacls', [target, '/inheritance:r', '/grant:r', `${account}:${directory ? '(OI)(CI)F' : 'F'}`]],
-  ];
+  const grant = ['icacls', [target, '/inheritance:r', '/grant:r', `${account}:${directory ? '(OI)(CI)F' : 'F'}`]];
+  return directory ? [['icacls', [target, '/reset']], grant] : [grant];
 }
 
 // How long one icacls call may take before it is given up: a stalled call
