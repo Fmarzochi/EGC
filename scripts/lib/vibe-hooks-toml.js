@@ -1,9 +1,12 @@
 'use strict';
 
-// Manages the EGC entries of Mistral Vibe's hooks.toml. Vibe declares hooks
-// as [[hooks]] tables (name, type, match, command, timeout, strict,
-// description), loads <project>/.vibe/hooks.toml before ~/.vibe/hooks.toml,
-// and a hook of the same name in both files resolves to the project entry.
+// Manages the EGC entries of Mistral Vibe's hooks.toml: the Guardian and
+// the Token Crusher on pre_tool, the session start on session_start and the
+// Team Brain push on post_agent. Vibe declares hooks as [[hooks]] tables
+// (name, type, match, command, timeout, strict, description), loads
+// <project>/.vibe/hooks.toml before ~/.vibe/hooks.toml, and a hook of the
+// same name in both files resolves to the project entry, so the two scopes
+// never run a hook twice.
 // The file is edited as text: an EGC block is found by its name, replaced
 // whole or removed, and every other line is left byte for byte, so a hook
 // the person wrote survives every install, repair and uninstall. When the
@@ -25,9 +28,15 @@ try {
 
 const HOOK_OPERATION_KIND = 'merge-claude-settings-hooks';
 const VIBE_PRE_TOOL_EVENT = 'vibe:pre_tool';
+const VIBE_SESSION_START_EVENT = 'vibe:session_start';
+const VIBE_POST_AGENT_EVENT = 'vibe:post_agent';
 const VIBE_HOOKS_FILE_NAME = 'hooks.toml';
 const VIBE_GUARDIAN_HOOK_NAME = 'egc-guardian';
 const VIBE_CRUSHER_HOOK_NAME = 'egc-crusher';
+const VIBE_SESSION_START_HOOK_NAME = 'egc-session-start';
+const VIBE_STOP_HOOK_NAME = 'egc-stop';
+const VIBE_SESSION_START_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/vibe-session-start.js';
+const TEAM_SYNC_STOP_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/team-sync-stop.js';
 // Vibe names a tool after its class in snake_case: Bash, GitBash,
 // ExperimentalBash and ExperimentalGitBash run shell commands (the Git Bash
 // pair on Windows), Edit writes files. The re: prefix makes the matcher a
@@ -43,18 +52,42 @@ const CRUSHER_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/vibe-crusher-
 const GUARDIAN_ADAPTER_BASENAME = path.basename(GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH);
 const CRUSHER_ADAPTER_BASENAME = path.basename(CRUSHER_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH);
 
-// The two EGC hooks by name. The Guardian is strict: a failure of the
-// adapter itself denies the call instead of letting it through. The Crusher
-// is not: a failure runs the original command.
+// The EGC hooks by name, each with the event type it goes under. The
+// Guardian is strict: a failure of the adapter itself denies the call
+// instead of letting it through. The Crusher is not: a failure runs the
+// original command. The session hooks are not either: a restore or a push
+// that could not run never stops the session, and neither takes a matcher.
+// session_start reads hook_specific_output.additional_context back and puts
+// it before the first message; post_agent runs after each response, where
+// Claude Code's Stop runs, and reads nothing from the push.
 const EGC_HOOKS = Object.freeze({
   [VIBE_GUARDIAN_HOOK_NAME]: Object.freeze({
+    type: 'pre_tool',
     strict: true,
     description: 'EGC Guardian: validates every shell command and file edit before it runs.',
   }),
   [VIBE_CRUSHER_HOOK_NAME]: Object.freeze({
+    type: 'pre_tool',
     strict: false,
     description: 'EGC Token Crusher: routes a noisy shell command through egc run.',
   }),
+  [VIBE_SESSION_START_HOOK_NAME]: Object.freeze({
+    type: 'session_start',
+    strict: false,
+    description: 'EGC: restores the project memory and pulls the Team Brain when a session starts.',
+  }),
+  [VIBE_STOP_HOOK_NAME]: Object.freeze({
+    type: 'post_agent',
+    strict: false,
+    description: 'EGC: pushes the Team Brain after a response that changed the state.',
+  }),
+});
+// The EGC hook each script stands for, by its file name.
+const HOOK_NAME_BY_BASENAME = Object.freeze({
+  [GUARDIAN_ADAPTER_BASENAME]: VIBE_GUARDIAN_HOOK_NAME,
+  [CRUSHER_ADAPTER_BASENAME]: VIBE_CRUSHER_HOOK_NAME,
+  [path.basename(VIBE_SESSION_START_SCRIPT_SOURCE_RELATIVE_PATH)]: VIBE_SESSION_START_HOOK_NAME,
+  [path.basename(TEAM_SYNC_STOP_SCRIPT_SOURCE_RELATIVE_PATH)]: VIBE_STOP_HOOK_NAME,
 });
 
 const HOOKS_TABLE_HEADER_RE = /^\s*\[\[\s*hooks\s*\]\]\s*(?:#.*)?$/;
@@ -98,13 +131,10 @@ function resolveVibeCrusherAdapterDestination(targetRoot) {
   return path.join(targetRoot, 'scripts', 'hooks', CRUSHER_ADAPTER_BASENAME);
 }
 
-// The EGC hook a script path stands for, by the adapter's file name: the
+// The EGC hook a script path stands for, by the script's file name: the
 // install state keeps the script path of every hook entry, not its name.
 function hookNameOfScript(hookScriptPath) {
-  const base = path.basename(String(hookScriptPath));
-  if (base === GUARDIAN_ADAPTER_BASENAME) return VIBE_GUARDIAN_HOOK_NAME;
-  if (base === CRUSHER_ADAPTER_BASENAME) return VIBE_CRUSHER_HOOK_NAME;
-  return null;
+  return HOOK_NAME_BY_BASENAME[path.basename(String(hookScriptPath))] || null;
 }
 
 // Splits a hooks.toml into its [[hooks]] blocks: a block runs from its
@@ -136,13 +166,15 @@ function parseHookBlocks(content) {
   return { lines, blocks };
 }
 
+// The block of one EGC hook: a tool hook carries its match, a session hook
+// none.
 function renderHookBlock(name, command, matcher) {
   const hook = EGC_HOOKS[name];
   return [
     '[[hooks]]',
     `name = ${tomlString(name)}`,
-    'type = "pre_tool"',
-    `match = ${tomlString(matcher)}`,
+    `type = ${tomlString(hook.type)}`,
+    ...(matcher === undefined ? [] : [`match = ${tomlString(matcher)}`]),
     `command = ${tomlString(command)}`,
     `strict = ${hook.strict ? 'true' : 'false'}`,
     `description = ${tomlString(hook.description)}`,
@@ -247,16 +279,18 @@ function removeVibeHookFromFile(hooksTomlPath, hookScriptPath) {
 
 /**
  * Whether hooks.toml holds the EGC hook of a script exactly as an install
- * writes it. With the matcher the whole block is compared, so a strict flag
+ * writes it. An exact check compares the whole block, so a strict flag
  * flipped to false or a type changed by hand is drift the doctor reports
- * and repair rewrites; without it (a retirement check) the name and the
- * command decide.
+ * and repair rewrites; the check is exact when a matcher is given or when
+ * asked for, and otherwise (a retirement check) the name and the command
+ * decide.
  * @param {string} hooksTomlPath
  * @param {string} hookScriptPath
  * @param {string} [matcher]
+ * @param {boolean} [exact]
  * @returns {'ok'|'drifted'}
  */
-function inspectVibeHookFile(hooksTomlPath, hookScriptPath, matcher) {
+function inspectVibeHookFile(hooksTomlPath, hookScriptPath, matcher, exact = matcher !== undefined) {
   try {
     const name = hookNameOfScript(hookScriptPath);
     const command = buildHookCommand(hookScriptPath);
@@ -264,7 +298,7 @@ function inspectVibeHookFile(hooksTomlPath, hookScriptPath, matcher) {
     const found = blocks.some(block => (
       block.name === name
       && block.command === command
-      && (matcher === undefined || lines.slice(block.start, block.end + 1).join('\n') === renderHookBlock(name, command, matcher))
+      && (!exact || lines.slice(block.start, block.end + 1).join('\n') === renderHookBlock(name, command, matcher))
     ));
     return found ? 'ok' : 'drifted';
   } catch {
@@ -272,15 +306,16 @@ function inspectVibeHookFile(hooksTomlPath, hookScriptPath, matcher) {
   }
 }
 
-// The handlers claude-settings-hooks.js dispatches a vibe:pre_tool
-// operation to.
+// The handlers claude-settings-hooks.js dispatches a vibe:pre_tool,
+// vibe:session_start or vibe:post_agent operation to: the name of the hook
+// comes from the script, so the event only routes here.
 const VIBE_HOOK_OPERATION_HANDLERS = Object.freeze({
   apply: operation => applyVibeHookToFile(operation.destinationPath, operation.hookScriptPath, operation.hookMatcher),
   remove: operation => removeVibeHookFromFile(operation.destinationPath, operation.hookScriptPath),
-  inspect: operation => inspectVibeHookFile(operation.destinationPath, operation.hookScriptPath, operation.hookMatcher),
+  inspect: operation => inspectVibeHookFile(operation.destinationPath, operation.hookScriptPath, operation.hookMatcher, true),
 });
 
-function createVibeHookMergeOperation(targetRoot, { moduleId, sourceRelativePath, matcher, hookScriptPath }) {
+function createVibeHookMergeOperation(targetRoot, { moduleId, sourceRelativePath, matcher, hookScriptPath, hookEvent = VIBE_PRE_TOOL_EVENT }) {
   return {
     kind: HOOK_OPERATION_KIND,
     moduleId,
@@ -289,7 +324,7 @@ function createVibeHookMergeOperation(targetRoot, { moduleId, sourceRelativePath
     strategy: HOOK_OPERATION_KIND,
     ownership: 'managed',
     scaffoldOnly: false,
-    hookEvent: VIBE_PRE_TOOL_EVENT,
+    hookEvent,
     hookMatcher: matcher,
     hookScriptPath,
   };
@@ -321,6 +356,32 @@ function createVibeCrusherHookMergeOperation(targetRoot) {
     matcher: VIBE_CRUSHER_MATCHER,
     hookScriptPath: resolveVibeCrusherAdapterDestination(targetRoot),
   });
+}
+
+/**
+ * The two session entries of hooks.toml under targetRoot: session_start
+ * runs the Vibe wrapper of the shared host session start (the pull and the
+ * restore, answered as hook_specific_output.additional_context), post_agent
+ * runs the shared Team Brain push. Neither takes a matcher.
+ * @param {string} targetRoot
+ * @returns {Array<object>}
+ */
+function createVibeSessionHookMergeOperations(targetRoot) {
+  const { HOST_SESSION_HOOK_MODULE_ID, resolveTeamSyncStopHookScriptDestination } = require('./claude-settings-hook-copy-operations');
+  return [
+    createVibeHookMergeOperation(targetRoot, {
+      moduleId: HOST_SESSION_HOOK_MODULE_ID,
+      sourceRelativePath: VIBE_SESSION_START_SCRIPT_SOURCE_RELATIVE_PATH,
+      hookEvent: VIBE_SESSION_START_EVENT,
+      hookScriptPath: path.join(targetRoot, ...VIBE_SESSION_START_SCRIPT_SOURCE_RELATIVE_PATH.split('/')),
+    }),
+    createVibeHookMergeOperation(targetRoot, {
+      moduleId: HOST_SESSION_HOOK_MODULE_ID,
+      sourceRelativePath: TEAM_SYNC_STOP_SCRIPT_SOURCE_RELATIVE_PATH,
+      hookEvent: VIBE_POST_AGENT_EVENT,
+      hookScriptPath: resolveTeamSyncStopHookScriptDestination(targetRoot),
+    }),
+  ];
 }
 
 /**
@@ -378,12 +439,18 @@ module.exports = {
   VIBE_GUARDIAN_MATCHER,
   VIBE_HOOKS_FILE_NAME,
   VIBE_HOOK_OPERATION_HANDLERS,
+  VIBE_POST_AGENT_EVENT,
   VIBE_PRE_TOOL_EVENT,
+  VIBE_SESSION_START_EVENT,
+  VIBE_SESSION_START_HOOK_NAME,
+  VIBE_SESSION_START_SCRIPT_SOURCE_RELATIVE_PATH,
+  VIBE_STOP_HOOK_NAME,
   applyVibeHookToFile,
   createVibeCrusherAdapterCopyOperation,
   createVibeCrusherHookMergeOperation,
   createVibeGuardianHookMergeOperation,
   createVibeGuardianScriptCopyOperations,
+  createVibeSessionHookMergeOperations,
   inspectVibeHookFile,
   parseHookBlocks,
   removeVibeHookFromFile,

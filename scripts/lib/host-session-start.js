@@ -1,15 +1,16 @@
 'use strict';
 
-// The SessionStart hook of the hosts that read the Claude Code hook format
-// and name their fields their own way (Qwen Code, CodeBuddy, Junie, Auggie,
-// Goose, Droid). The payload comes on stdin; the project is the root the host
-// names, before its working directory, since the memory is keyed by project;
-// the shared session adapter pulls the Team Brain when the team asks for it,
-// restores the project memory and emits telemetry, as it does for Claude,
-// OpenCode, Cursor and Copilot; and the answer goes out in both shapes the
-// hosts read, additionalContext at the top and under hookSpecificOutput. A
-// host that reads nothing from this hook (Junie, Auggie) still gets the pull.
-// Each host has a thin wrapper in scripts/hooks/<host>-session-start.js.
+// The session-start hook of the hosts that name their fields their own way
+// (Qwen Code, CodeBuddy, Junie, Auggie, Goose, Droid, OpenHands, Devin, Kimi
+// Code, Mistral Vibe, Crush). The payload comes on stdin; the project is the
+// root the host names, before its working directory, since the memory is
+// keyed by project; the shared session adapter pulls the Team Brain when the
+// team asks for it, restores the project memory and emits telemetry, as it
+// does for Claude, OpenCode, Cursor and Copilot; and the answer goes out in
+// the shape the host reads, additionalContext at the top and under
+// hookSpecificOutput for most, snake_case for Vibe. A host that reads
+// nothing from this hook (Junie, Auggie, Kimi Code, Crush) still gets the
+// pull. Each host has a thin wrapper in scripts/hooks/<host>-session-start.js.
 
 const fs = require('node:fs');
 
@@ -28,12 +29,13 @@ function firstString(...values) {
 }
 
 // The project: project_path (Junie), the first workspace root (Auggie),
-// then cwd (Qwen, CodeBuddy, Droid) or working_dir (Goose); a payload that
-// names nothing leaves the working directory of the hook, which a project
-// hook runs from.
-function projectOf(payload) {
+// then cwd (Qwen, CodeBuddy, Droid, Kimi Code, Vibe, Crush) or working_dir
+// (Goose), then the project directory a host exports instead of naming it
+// in the payload (DEVIN_PROJECT_DIR); a payload that names nothing leaves
+// the working directory of the hook, which a project hook runs from.
+function projectOf(payload, env = process.env) {
   const roots = Array.isArray(payload.workspace_roots) ? payload.workspace_roots : [];
-  return firstString(payload.project_path, ...roots, payload.cwd, payload.working_dir) || process.cwd();
+  return firstString(payload.project_path, ...roots, payload.cwd, payload.working_dir, env.DEVIN_PROJECT_DIR) || process.cwd();
 }
 
 // The session: session_id (most hosts), sessionId, or the conversation
@@ -42,12 +44,21 @@ function sessionIdOf(payload) {
   return firstString(payload.session_id, payload.sessionId, payload.conversation_id);
 }
 
-// The two shapes the hosts read: additionalContext at the top level (Droid,
-// OpenHands) and under hookSpecificOutput (Qwen, CodeBuddy, Claude readers).
-function sessionStartAnswer(context) {
-  return context
-    ? { additionalContext: context, hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: context } }
-    : {};
+// The shapes the hosts read: additionalContext at the top level (Droid,
+// OpenHands) and under hookSpecificOutput (Qwen, CodeBuddy, Devin, Claude
+// readers) for every host but Vibe, which reads additional_context under
+// hook_specific_output, the snake_case of its own contract.
+const ANSWER_SHAPES = Object.freeze({
+  vibe: context => ({ hook_specific_output: { additional_context: context } }),
+});
+
+function claudeShapeAnswer(context) {
+  return { additionalContext: context, hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: context } };
+}
+
+function sessionStartAnswer(context, host) {
+  if (!context) return {};
+  return (ANSWER_SHAPES[host] || claudeShapeAnswer)(context);
 }
 
 async function runHostSessionStart(host, payload = readPayload()) {
@@ -61,7 +72,7 @@ async function runHostSessionStart(host, payload = readPayload()) {
   } catch (_) { // NOSONAR: never block a session startup
     // Keep the empty fallback above.
   }
-  return sessionStartAnswer(typeof restored.context === 'string' ? restored.context : '');
+  return sessionStartAnswer(typeof restored.context === 'string' ? restored.context : '', host);
 }
 
 // The entry point of a wrapper: fail open, so a startup that cannot restore

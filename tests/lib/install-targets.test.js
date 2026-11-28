@@ -1680,13 +1680,17 @@ function runTests() {
       const scriptOf = name => path.join(targetRoot, 'scripts', 'hooks', name);
       const byJson = (a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b));
 
-      const hookOperations = plan.operations.filter(operation => operation.kind === 'merge-claude-settings-hooks');
+      const hookOperations = plan.operations.filter(operation => operation.kind === 'merge-claude-settings-hooks' && operation.hookEvent === 'PreToolUse');
       assert.deepStrictEqual(
         hookOperations.map(operation => [operation.hookEvent, operation.hookMatcher, operation.hookScriptPath, operation.destinationPath]).sort(byJson),
         [
           ['PreToolUse', '^(exec|edit|write|notebook_edit|multi_edit|apply_patch)$', scriptOf('windsurf-gateguard-adapter.js'), configPath],
           ['PreToolUse', '^exec$', scriptOf('windsurf-guardian-adapter.js'), configPath],
         ].sort(byJson)
+      );
+      assert.ok(
+        !plan.operations.some(operation => operation.hookEvent === 'pre_write_code' || operation.hookEvent === 'pre_run_command'),
+        'no hook entry of the plan uses a Cascade event'
       );
       assert.ok(plan.managedRoots.includes(path.resolve(path.dirname(configPath))), 'the folder of the Devin config is a root the install owns');
 
@@ -2950,6 +2954,55 @@ function runTests() {
       assert.strictEqual(new Set(destinations).size, destinations.length, `${target}: no file is planned twice`);
     }
   }));
+
+  tally(test('Devin, Kimi Code, Mistral Vibe and Crush register the session hooks in their own files beside their gates and scaffold the session runtime', () => runWithoutConfigHomeVariables(() => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+    const projectRoot = '/Users/example/work/demo';
+    const previous = { KIMI_CODE_HOME: process.env.KIMI_CODE_HOME, VIBE_HOME: process.env.VIBE_HOME, CRUSH_GLOBAL_CONFIG: process.env.CRUSH_GLOBAL_CONFIG };
+    for (const name of Object.keys(previous)) delete process.env[name];
+    try {
+      // The Devin user config sits under ~/.config on Linux and macOS and
+      // under %APPDATA% on Windows: the module that places it says where.
+      const devinConfig = require('../../scripts/lib/devin-local-hooks').resolveDevinUserConfigPath(homeDir);
+      const cases = [
+        { target: 'windsurf', hooksFile: devinConfig, root: path.join(homeDir, '.codeium', 'windsurf'), script: 'devin-session-start.js', events: ['SessionStart', 'Stop'] },
+        { target: 'kimi', hooksFile: path.join(homeDir, '.kimi-code', 'config.toml'), root: path.join(homeDir, '.kimi-code'), script: 'kimi-session-start.js', events: ['kimi:session_start', 'kimi:stop'] },
+        { target: 'vibe', hooksFile: path.join(homeDir, '.vibe', 'hooks.toml'), root: path.join(homeDir, '.vibe'), script: 'vibe-session-start.js', events: ['vibe:session_start', 'vibe:post_agent'] },
+        { target: 'vibe-project', hooksFile: path.join(projectRoot, '.vibe', 'hooks.toml'), root: path.join(projectRoot, '.vibe'), script: 'vibe-session-start.js', events: ['vibe:session_start', 'vibe:post_agent'] },
+        { target: 'crush', hooksFile: path.join(homeDir, '.config', 'crush', 'crush.json'), root: path.join(homeDir, '.config', 'crush'), script: 'crush-session-start.js', events: ['crush:SessionStart', 'crush:TurnEnd'] },
+      ];
+      for (const { target, hooksFile, root, script, events } of cases) {
+        const plan = planInstallTargetScaffold({ target, repoRoot, homeDir, projectRoot, modules: [] });
+        const sessionOperations = plan.operations.filter(operation => (
+          operation.kind === 'merge-claude-settings-hooks' && operation.moduleId === 'egc-host-session-hook'
+        ));
+        assert.deepStrictEqual(
+          sessionOperations.map(operation => [operation.hookEvent, operation.destinationPath, operation.hookScriptPath, operation.hookMatcher]),
+          [
+            [events[0], hooksFile, path.join(root, 'scripts', 'hooks', script), undefined],
+            [events[1], hooksFile, path.join(root, 'scripts', 'hooks', 'team-sync-stop.js'), undefined],
+          ],
+          `${target}: the session start runs the wrapper of the host and the stop the shared push script, with no matcher, in ${hooksFile}`
+        );
+        for (const source of [`scripts/hooks/${script}`, 'scripts/hooks/team-sync-stop.js', 'scripts/lib/host-session-start.js', 'scripts/lib/session-start-adapter.js', 'scripts/lib/session-context-loader.js', 'scripts/lib/team-autosync.js', 'scripts/check-state-leak.js']) {
+          assert.ok(
+            plan.operations.some(operation => normalizedRelativePath(operation.sourceRelativePath) === source
+              && operation.destinationPath === path.join(root, ...source.split('/'))),
+            `${target}: ${source} is copied with its path kept, so the requires resolve`
+          );
+        }
+        const destinations = plan.operations.filter(operation => operation.kind !== 'merge-claude-settings-hooks').map(operation => operation.destinationPath);
+        assert.strictEqual(new Set(destinations).size, destinations.length, `${target}: no file is planned twice`);
+      }
+      const projectPlan = planInstallTargetScaffold({ target: 'windsurf-project', repoRoot, homeDir, projectRoot, modules: [] });
+      assert.ok(!projectPlan.operations.some(operation => operation.moduleId === 'egc-host-session-hook'), 'the Devin project config gets no session hook: the user config runs them in every project');
+    } finally {
+      for (const [name, value] of Object.entries(previous)) {
+        if (value !== undefined) process.env[name] = value;
+      }
+    }
+  })));
 
   tally(test('openhands-project registers session_start and stop beside the Guardian in .openhands/hooks.json and scaffolds the session runtime', () => {
     const repoRoot = path.join(__dirname, '..', '..');
@@ -5584,7 +5637,7 @@ function runTests() {
       modules: [],
     });
 
-    const mergeOps = plan.operations.filter(op => op.kind === 'merge-claude-settings-hooks');
+    const mergeOps = plan.operations.filter(op => op.kind === 'merge-claude-settings-hooks' && op.hookEvent === 'crush:PreToolUse');
     assert.strictEqual(mergeOps.length, 2, 'Should plan both Guardian and Crusher hook merge operations');
     const crushJsonPath = path.join(homeDir, '.config', 'crush', 'crush.json');
     assert.ok(mergeOps.every(op => op.destinationPath === crushJsonPath), 'Hooks should target crush.json');

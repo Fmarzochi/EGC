@@ -33,16 +33,22 @@ function keepsRootAgentsFile(adapter, targetRoot, operation) {
 // The plan both Vibe scopes share: skills flat under <root>/skills, the
 // other families under <root>/egc/library, then the Guardian and Token
 // Crusher scripts under <root>/scripts and their [[hooks]] entries in
-// <root>/hooks.toml. The hook modules are required here, not at load time,
-// because claude-settings-hooks.js itself loads vibe-hooks-toml.js for the
-// hook operation handlers.
+// <root>/hooks.toml, then the session hooks (the wrapper of the shared
+// session start, the Team Brain push and what they load, with the files
+// the gates already plant left to them) and their two [[hooks]] entries.
+// Both scopes plan them: Vibe runs a hook of one name once, from the
+// project file when both have it. The hook modules are required here, not
+// at load time, because claude-settings-hooks.js itself loads
+// vibe-hooks-toml.js for the hook operation handlers.
 function planVibeOperations(input, adapter) {
-  const { createCrusherScriptCopyOperations } = require('./claude-settings-hooks');
+  const { createCrusherScriptCopyOperations, createHostSessionHookCopyOperations } = require('./claude-settings-hooks');
   const {
+    VIBE_SESSION_START_SCRIPT_SOURCE_RELATIVE_PATH,
     createVibeCrusherAdapterCopyOperation,
     createVibeCrusherHookMergeOperation,
     createVibeGuardianHookMergeOperation,
     createVibeGuardianScriptCopyOperations,
+    createVibeSessionHookMergeOperations,
   } = require('./vibe-hooks-toml');
   const targetRoot = adapter.resolveRoot(input ?? {});
   const remap = (moduleId, sourceRelativePath, destinationPath, options) => (
@@ -51,13 +57,18 @@ function planVibeOperations(input, adapter) {
   const moduleOperations = createFlatSkillPlanOperations(input, adapter)
     .filter(operation => keepsRootAgentsFile(adapter, targetRoot, operation));
 
-  return [
+  const planned = [
     ...relocateLibraryFolders(moduleOperations, targetRoot),
     ...createVibeGuardianScriptCopyOperations(remap, targetRoot),
     ...createCrusherScriptCopyOperations(remap, targetRoot),
     createVibeCrusherAdapterCopyOperation(remap, targetRoot),
     createVibeGuardianHookMergeOperation(targetRoot),
     createVibeCrusherHookMergeOperation(targetRoot),
+  ];
+  return [
+    ...planned,
+    ...createHostSessionHookCopyOperations(remap, targetRoot, VIBE_SESSION_START_SCRIPT_SOURCE_RELATIVE_PATH, new Set(planned.map(operation => operation.destinationPath))),
+    ...createVibeSessionHookMergeOperations(targetRoot),
   ];
 }
 
