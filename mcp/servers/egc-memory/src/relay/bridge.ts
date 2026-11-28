@@ -1,7 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import WebSocket from 'ws';
-import type { RawData } from 'ws';
 
 import { resolveHome } from '../home';
 import { MEMORY_CHANGED_KIND, parseMemoryChange, scheduleMemoryPull } from '../memory-notify';
@@ -23,33 +21,31 @@ import {
 import type { BusDb, RemoteSession, SharedEvent, SharedLock } from '../session-bus';
 import { parseTeamKey } from '../sync/envelope';
 import { getTeamConfig } from '../sync/TeamSync';
-import { CLOSE_REPLACED } from './hub';
+import { openLinkFor } from './link';
+import type { CentralLink, LinkClose, LinkEvents, LinkOpener } from './link';
 import { loadOrCreateMachine } from './machine';
 import type { MachineIdentity } from './machine';
 import { readMeshConfig } from './mesh-config';
 import { privateJson, writePrivateFile } from './private-file';
 import {
   BROADCAST,
-  MESH_PROTOCOL_VERSION,
   ReplayGuard,
   meshAuthKey,
   meshSealKey,
-  helloProof,
   newHexId,
   openBox,
-  parseHubFrame,
   sealBox,
 } from './protocol';
-import type { MeshMessage } from './protocol';
+import type { HubFrame, MeshMessage } from './protocol';
 
-// The bridge of this machine: the one connection to the central that every
-// memory server of the machine shares. The servers elect one of them through
-// a lock file; the elected one tells the central who is here (presence,
-// every 30 s, sealed for the whole team) and writes what the other machines
-// say about themselves into the local bus, where session_peers reads it.
-// Without a central configured, or with the central down, the machine works
-// alone as it always did; the bridge reconnects by itself, waiting up to 30 s
-// between attempts.
+// The bridge of this machine: the one connection to the central (or to the
+// NATS server the person runs in its place) that every memory server of the
+// machine shares. The servers elect one of them through a lock file; the
+// elected one tells the team who is here (presence, every 30 s, sealed for
+// the whole team) and writes what the other machines say about themselves
+// into the local bus, where session_peers reads it. Without a central
+// configured, or with the central down, the machine works alone as it always
+// did; the bridge reconnects by itself, waiting up to 30 s between attempts.
 export const PRESENCE_INTERVAL_MS = 30_000;
 // Events and lock changes leave within a second of landing on the local bus.
 export const FORWARD_INTERVAL_MS = 1_000;
@@ -75,6 +71,11 @@ export interface BridgeOptions {
   enqueue?: <T>(work: () => Promise<T>) => Promise<T>;
   // The keys of the machine's state on disk; a test home hands its own in.
   keys?: MachineKeys;
+  // The credentials file of this machine on a NATS server, when the central
+  // is one; the central of egc mesh serve takes none.
+  authFile?: string | null;
+  // How the link to the central is opened; a test hands in a stand-in.
+  openLink?: LinkOpener;
 }
 
 export interface BridgeStatus {
@@ -182,7 +183,7 @@ export class MeshBridge {
   readonly online = new Set<string>();
   connected = false;
   private identity: MachineIdentity;
-  private socket: WebSocket | null = null;
+  private link: CentralLink | null = null;
   private presenceTimer: NodeJS.Timeout | null = null;
   private forwardTimer: NodeJS.Timeout | null = null;
   private reconnectTimer: NodeJS.Timeout | null = null;
@@ -194,6 +195,10 @@ export class MeshBridge {
   private forwardCursor = 0;
   private startedAt: string | null = null;
   private lastLocksSent = '';
+  // Over a relay that does not tell who arrives, a presence from a machine
+  // not seen before is answered with our own at once, so the newcomer sees
+  // this machine within a second instead of at the next presence.
+  private greet = false;
   private forwardRun: Promise<void> | null = null;
   private inboundChain: Promise<void> | null = null;
   private machineKeysCache: MachineKeys | null = null;
@@ -202,6 +207,7 @@ export class MeshBridge {
   private readonly sealKey: Buffer;
   private readonly now: () => number;
   private readonly log: (line: string) => void;
+  private readonly serialize: <T>(work: () => Promise<T>) => Promise<T>;
 
   constructor(private readonly options: BridgeOptions) {
     this.identity = options.machine;
@@ -210,6 +216,10 @@ export class MeshBridge {
     this.replay = new ReplayGuard(this.now);
     this.authKey = meshAuthKey(options.teamKey);
     this.sealKey = meshSealKey(options.teamKey);
+    // Inside a memory server the bridge takes its turn with the write
+    // arbiter of the server; alone, the frames are already handled one at a
+    // time, and nothing else of the bridge opens a transaction.
+    this.serialize = options.enqueue ?? (work => work());
   }
 
   get machine(): MachineIdentity {
@@ -218,6 +228,12 @@ export class MeshBridge {
 
   get central(): string {
     return this.options.central;
+  }
+
+  // The credentials file this bridge opens a NATS server with; null for the
+  // central, and for a server that asks for none.
+  get authFile(): string | null {
+    return this.options.authFile ?? null;
   }
 
   // True once the bridge is down for good: after stop(), or when another
@@ -244,19 +260,15 @@ export class MeshBridge {
   async stop(): Promise<void> {
     this.stopped = true;
     this.clearTimers();
-    const socket = this.socket;
-    this.socket = null;
+    // Over a relay that tells nobody who leaves, this machine says goodbye
+    // itself, sealed, so the others forget it at once instead of after ten
+    // minutes of silence.
+    if (this.connected && this.link && !this.link.tellsPresence) this.send(BROADCAST, { type: 'bye', body: {} });
+    const link = this.link;
+    this.link = null;
     this.connected = false;
     this.writeStatus();
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      await new Promise<void>(resolve => {
-        socket.once('close', () => resolve());
-        socket.close();
-        setTimeout(resolve, 1000).unref();
-      });
-    } else if (socket) {
-      socket.terminate();
-    }
+    if (link) await link.close();
     await this.settleInFlight();
     this.connected = false;
     this.writeStatus();
@@ -286,7 +298,7 @@ export class MeshBridge {
   // read again first, so a label changed with `egc mesh label` travels with
   // the next presence.
   async announce(): Promise<boolean> {
-    if (!this.connected || !this.socket || this.socket.readyState !== WebSocket.OPEN) return false;
+    if (!this.connected || !this.link) return false;
     this.refreshIdentity();
     const sessions = (await listLiveSessions(this.options.db, this.now())).slice(0, MAX_SESSIONS_IN_PRESENCE);
     const locks = await listSharedLocks(this.options.db, this.now());
@@ -366,11 +378,10 @@ export class MeshBridge {
   // Seals a message for one machine or for all of them and hands it to the
   // central; false when there is no connection to hand it to.
   send(to: string, message: MeshMessage): boolean {
-    if (!this.connected || !this.socket || this.socket.readyState !== WebSocket.OPEN) return false;
+    if (!this.connected || !this.link) return false;
     const id = newHexId();
     const box = sealBox(this.sealKey, { from: this.identity.id, to, id }, message, this.now());
-    this.socket.send(JSON.stringify({ t: 'send', v: MESH_PROTOCOL_VERSION, to, id, box }));
-    return true;
+    return this.link.send(to, id, box);
   }
 
   private refreshIdentity(): void {
@@ -384,44 +395,45 @@ export class MeshBridge {
 
   private connect(): void {
     if (this.stopped) return;
-    let socket: WebSocket;
+    // The frames of a link are handled one after the other, in the order
+    // they came: a presence that is being written to the bus while the
+    // central says the same machine left would otherwise land after the
+    // removal. The queue belongs to this link: what a link that is no longer
+    // current still has queued is dropped, so it neither delays the next one
+    // nor touches its state. A link that closes before it is even in place
+    // is handled once it is.
+    let inbound: Promise<void> = Promise.resolve();
+    let link: CentralLink | null = null;
+    const early: { cause: LinkClose | null } = { cause: null };
+    const events: LinkEvents = {
+      frame: frame => {
+        inbound = inbound
+          .then(() => (link !== null && this.link === link ? this.onFrame(frame) : undefined))
+          .catch(error => this.log(`mesh: a frame was not handled: ${error instanceof Error ? error.message : String(error)}`));
+        this.inboundChain = inbound;
+      },
+      closed: cause => {
+        if (link === null) early.cause = cause;
+        else this.onClose(link, cause);
+      },
+    };
+    const open = this.options.openLink ?? openLinkFor;
     try {
-      socket = new WebSocket(this.options.central);
+      link = open({ central: this.options.central, machineId: this.identity.id, authKey: this.authKey, teamKey: this.options.teamKey, authFile: this.options.authFile ?? null, log: this.log }, events);
     } catch (error) {
       this.log(`mesh: the central address is not usable: ${error instanceof Error ? error.message : String(error)}`);
       return;
     }
-    this.socket = socket;
+    this.link = link;
     // The status file is refreshed with every connection attempt, so a
     // bridge that is reconnecting through a long outage of the central is
     // still reported as alive, and as reconnecting.
     this.writeStatus();
-    // The frames of a connection are handled one after the other, in the
-    // order the central sent them: a presence that is being written to the
-    // bus while the central says the same machine left would otherwise land
-    // after the removal. The queue belongs to this connection: what a
-    // connection that is no longer current still has queued is dropped, so
-    // it neither delays the challenge of the next one nor touches its state.
-    let inbound: Promise<void> = Promise.resolve();
-    socket.on('message', (data: RawData, isBinary: boolean) => {
-      if (isBinary) return;
-      const raw = data.toString();
-      inbound = inbound
-        .then(() => (this.socket === socket ? this.onFrame(raw, socket) : undefined))
-        .catch(error => this.log(`mesh: a frame was not handled: ${error instanceof Error ? error.message : String(error)}`));
-      this.inboundChain = inbound;
-    });
-    socket.on('close', code => this.onClose(socket, code));
-    socket.on('error', error => this.log(`mesh: connection error: ${error.message}`));
+    if (early.cause !== null) this.onClose(link, early.cause);
   }
 
-  private async onFrame(raw: string, socket: WebSocket): Promise<void> {
-    const frame = parseHubFrame(raw);
-    if (!frame || this.socket !== socket) return;
+  private async onFrame(frame: HubFrame): Promise<void> {
     switch (frame.t) {
-      case 'challenge':
-        socket.send(JSON.stringify({ t: 'hello', v: MESH_PROTOCOL_VERSION, machine: this.identity.id, proof: helloProof(this.authKey, frame.challenge, this.identity.id) }));
-        return;
       case 'welcome':
         this.connected = true;
         this.backoffMs = RECONNECT_MIN_MS;
@@ -464,10 +476,9 @@ export class MeshBridge {
     if (from === this.identity.id) return;
     const opened = openBox(this.sealKey, { from, to, id }, box);
     if (!opened || !this.replay.accept(id, opened.ts)) return;
-    const serialize = this.options.enqueue ?? (<T>(work: () => Promise<T>) => work());
     let taken: boolean;
     try {
-      taken = await serialize(() => withBusTransaction(this.options.db, async () => {
+      taken = await this.serialize(() => withBusTransaction(this.options.db, async () => {
         if (!(await rememberBox(this.options.db, id, this.now()))) return false;
         await this.applyMessage(from, opened.message);
         return true;
@@ -476,7 +487,12 @@ export class MeshBridge {
       this.replay.forget(id);
       throw error;
     }
-    if (taken) this.options.onMessage?.(from, opened.message);
+    if (!taken) return;
+    this.options.onMessage?.(from, opened.message);
+    if (this.greet) {
+      this.greet = false;
+      this.announce().catch(error => this.log(`mesh: the answer to a newcomer was not sent: ${error instanceof Error ? error.message : String(error)}`));
+    }
   }
 
   // What another machine said, written into the local bus: its presence
@@ -485,12 +501,11 @@ export class MeshBridge {
   private async applyMessage(from: string, message: MeshMessage): Promise<void> {
     const { type, body } = message;
     if (type === 'presence') {
-      const presence = body as Partial<PresenceBody> | undefined;
-      const label = typeof presence?.label === 'string' ? presence.label : from.slice(0, 8);
-      await recordRemotePresence(this.options.db, from, label, Array.isArray(presence?.sessions) ? presence.sessions : [], this.now());
-      await recordRemoteLocks(this.options.db, from, Array.isArray(presence?.locks) ? presence.locks : []);
-      this.online.add(from);
-      this.writeStatus();
+      await this.applyPresence(from, body);
+      return;
+    }
+    if (type === 'bye') {
+      await this.applyGoodbye(from);
       return;
     }
     if (type === 'locks') {
@@ -503,6 +518,27 @@ export class MeshBridge {
       return;
     }
     if (type === 'event') await this.applyEvent(body);
+  }
+
+  // The presence of another machine: its sessions and locks, written into the
+  // bus. Over a relay that does not tell who arrives, a machine not seen
+  // before is answered with our own presence once this box is taken.
+  private async applyPresence(from: string, body: unknown): Promise<void> {
+    const presence = body as Partial<PresenceBody> | undefined;
+    const label = typeof presence?.label === 'string' ? presence.label : from.slice(0, 8);
+    await recordRemotePresence(this.options.db, from, label, Array.isArray(presence?.sessions) ? presence.sessions : [], this.now());
+    await recordRemoteLocks(this.options.db, from, Array.isArray(presence?.locks) ? presence.locks : []);
+    if (!this.online.has(from) && this.link !== null && !this.link.tellsPresence) this.greet = true;
+    this.online.add(from);
+    this.writeStatus();
+  }
+
+  // The goodbye of a machine that stops cleanly over a relay that tells
+  // nobody who leaves: forgotten at once, with its sessions and locks.
+  private async applyGoodbye(from: string): Promise<void> {
+    this.online.delete(from);
+    await forgetRemoteMachine(this.options.db, from);
+    this.writeStatus();
   }
 
   // A sealed state document another machine sent: merged into the state of
@@ -529,9 +565,15 @@ export class MeshBridge {
   // bridge is alive.
   private startPresence(): void {
     if (this.presenceTimer) clearInterval(this.presenceTimer);
+    // The sweep is one statement, so it needs no turn in the queue of the
+    // writers and never meets a transaction of the frames being handled.
     const tick = (): void => {
       this.announce().catch(error => this.log(`mesh: presence was not sent: ${error instanceof Error ? error.message : String(error)}`));
-      sweepRemoteMachines(this.options.db, this.now()).catch(() => undefined);
+      sweepRemoteMachines(this.options.db, this.now())
+        .then(swept => {
+          for (const id of swept) this.online.delete(id);
+        })
+        .catch(() => undefined);
       this.writeStatus();
     };
     tick();
@@ -544,9 +586,9 @@ export class MeshBridge {
     this.forwardTimer.unref();
   }
 
-  private onClose(socket: WebSocket, code: number): void {
-    if (this.socket !== socket) return;
-    this.socket = null;
+  private onClose(link: CentralLink, cause: LinkClose): void {
+    if (this.link !== link) return;
+    this.link = null;
     this.connected = false;
     if (this.presenceTimer) clearInterval(this.presenceTimer);
     if (this.forwardTimer) clearInterval(this.forwardTimer);
@@ -554,13 +596,15 @@ export class MeshBridge {
     this.forwardTimer = null;
     this.writeStatus();
     if (this.stopped) return;
-    if (code === CLOSE_REPLACED) {
+    if (cause.kind === 'replaced') {
       // Another bridge of this machine took over: this one steps down.
       this.log('mesh: another process of this machine holds the bridge now');
       this.stopped = true;
       return;
     }
     const delay = this.backoffMs;
+    // Said once per outage: the first attempt waits the shortest time.
+    if (delay === RECONNECT_MIN_MS) this.log(`mesh: the connection to ${this.options.central} was lost (${cause.reason}); reconnecting`);
     this.backoffMs = Math.min(this.backoffMs * 2, this.options.reconnectMaxMs ?? RECONNECT_MAX_MS);
     this.reconnectTimer = setTimeout(() => this.connect(), delay);
     this.reconnectTimer.unref();
@@ -645,7 +689,7 @@ export function startBridgeIfElected(options: StartBridgeOptions): BridgeHandle 
     // tick (of this server or another) stands again instead of waiting for
     // the heartbeat to go stale.
     try {
-      const started = new MeshBridge({ home, db: options.db, teamKey, central: config.central, machine: loadOrCreateMachine(home), log, now, presenceMs: options.presenceMs, reconnectMaxMs: options.reconnectMaxMs, enqueue: options.enqueue });
+      const started = new MeshBridge({ home, db: options.db, teamKey, central: config.central, authFile: config.authFile, machine: loadOrCreateMachine(home), log, now, presenceMs: options.presenceMs, reconnectMaxMs: options.reconnectMaxMs, enqueue: options.enqueue });
       started.start();
       lock = candidate;
       bridge = started;
@@ -663,7 +707,9 @@ export function startBridgeIfElected(options: StartBridgeOptions): BridgeHandle 
         return;
       }
       const config = readMeshConfig(home);
-      const keeps = lock?.renew() === true && config !== null && config.central === bridge.central && !bridge.isStopped;
+      // A central or a credentials file changed with egc mesh connect is
+      // joined by the next bridge: this one steps down.
+      const keeps = lock?.renew() === true && config !== null && config.central === bridge.central && config.authFile === bridge.authFile && !bridge.isStopped;
       if (!keeps) stepDown().catch(() => undefined);
     } catch (error) {
       log(`mesh: the bridge election failed: ${error instanceof Error ? error.message : String(error)}`);
