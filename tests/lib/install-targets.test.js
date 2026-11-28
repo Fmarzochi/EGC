@@ -2951,6 +2951,29 @@ function runTests() {
     }
   }));
 
+  tally(test('openhands-project registers session_start and stop beside the Guardian in .openhands/hooks.json and scaffolds the session runtime', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+    const root = path.join(projectRoot, '.openhands');
+    const hooksFile = path.join(root, 'hooks.json');
+    const plan = planInstallTargetScaffold({ target: 'openhands-project', repoRoot, projectRoot, homeDir: '/Users/example', modules: [] });
+    const merges = plan.operations.filter(operation => operation.kind === 'merge-claude-settings-hooks' && operation.destinationPath === hooksFile);
+    assert.deepStrictEqual(
+      merges.map(operation => [operation.hookEvent, path.basename(operation.hookScriptPath)]).sort(),
+      [['pre_tool_use', 'openhands-guardian-adapter.js'], ['session_start', 'openhands-session-start.js'], ['stop', 'team-sync-stop.js']],
+      'the Guardian keeps its event, the session hooks take the snake_case events of the file'
+    );
+    for (const source of ['scripts/hooks/openhands-session-start.js', 'scripts/hooks/team-sync-stop.js', 'scripts/lib/host-session-start.js', 'scripts/lib/session-start-adapter.js', 'scripts/lib/team-autosync.js', 'scripts/check-state-leak.js']) {
+      assert.ok(
+        plan.operations.some(operation => normalizedRelativePath(operation.sourceRelativePath) === source
+          && operation.destinationPath === path.join(root, ...source.split('/'))),
+        `${source} is copied with its path kept, so the requires resolve`
+      );
+    }
+    const destinations = plan.operations.filter(operation => operation.kind !== 'merge-claude-settings-hooks').map(operation => operation.destinationPath);
+    assert.strictEqual(new Set(destinations).size, destinations.length, 'no file is planned twice');
+  }));
+
   tally(test('COPILOT_HOME moves the whole Copilot root: the hooks file, the skills and the managed roots', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';

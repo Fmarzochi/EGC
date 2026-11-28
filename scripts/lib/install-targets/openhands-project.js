@@ -1,11 +1,12 @@
 const { createInstallTargetAdapter, createRemappedOperation } = require('./helpers');
-const { createOpenHandsGuardianOperations } = require('../openhands-guardian-operations');
+const { createOpenHandsGuardianOperations, createOpenHandsSessionOperations } = require('../openhands-guardian-operations');
 
 // EGC-498 (corrected): confirmed against OpenHands/docs' own hooks.mdx
 // that hooks live in .openhands/hooks.json; OpenHands also reads a global
 // ~/.openhands/hooks.json when the project has none, which EGC does not
 // write yet (see docs/spec/integration-tiers.md). This adapter installs
-// ONLY the Guardian hook in the project file. No
+// the Guardian hook and the two session hooks (session_start restores the
+// project memory, stop pushes the Team Brain) in the project file. No
 // skill scaffold here: OpenHands skill discovery already happens via
 // openhands-home.js's shared ~/.agents/skills/ root, and inventing a
 // second, project-scoped skill path was never part of this integration's
@@ -24,6 +25,8 @@ module.exports = createInstallTargetAdapter({
   planOperations(input, adapter) {
     const planningInput = { repoRoot: input.repoRoot, projectRoot: input.projectRoot, homeDir: input.homeDir };
     const targetRoot = adapter.resolveRoot(planningInput);
-    return createOpenHandsGuardianOperations(adapter, targetRoot, input.projectRoot, createRemappedOperation);
+    const guardian = createOpenHandsGuardianOperations(adapter, targetRoot, input.projectRoot, createRemappedOperation);
+    const planned = new Set(guardian.map(operation => operation.destinationPath));
+    return [...guardian, ...createOpenHandsSessionOperations(adapter, targetRoot, input.projectRoot, createRemappedOperation, planned)];
   },
 });
