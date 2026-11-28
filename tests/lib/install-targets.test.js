@@ -6040,9 +6040,15 @@ function runTests() {
         ['scripts', 'hooks', 'pre-bash-guardian-validate.js'],
         ['scripts', 'hooks', 'pre-write-guardian-validate.js'],
         ['scripts', 'hooks', 'pre-bash-crusher-rewrite.js'],
+        ['scripts', 'lib', 'session-start-adapter.js'],
+        ['scripts', 'lib', 'session-context-loader.js'],
+        ['scripts', 'lib', 'team-autosync.js'],
+        ['scripts', 'check-state-leak.js'],
+        ['scripts', 'hooks', 'mesh-events-inject.js'],
       ]) {
         assert.ok(destinations.includes(path.join(root, ...expected)), `${expected.join('/')} is planned`);
       }
+      assert.strictEqual(new Set(destinations).size, destinations.length, 'no file is planned twice: the session runtime leaves to the gates what they already plant');
       assert.ok(!destinations.some(destination => destination.startsWith(path.join(root, 'commands') + path.sep)), 'commands land as prompt templates, not under commands/');
       process.env.PI_CODING_AGENT_DIR = '~/pi-data';
       assert.strictEqual(adapter.resolveRoot({ homeDir }), path.join(homeDir, 'pi-data'), 'a leading tilde is the home directory');
