@@ -1688,6 +1688,10 @@ function runTests() {
           ['PreToolUse', '^exec$', scriptOf('windsurf-guardian-adapter.js'), configPath],
         ].sort(byJson)
       );
+      assert.ok(
+        !plan.operations.some(operation => operation.hookEvent === 'pre_write_code' || operation.hookEvent === 'pre_run_command'),
+        'no hook entry of the plan uses a Cascade event'
+      );
       assert.ok(plan.managedRoots.includes(path.resolve(path.dirname(configPath))), 'the folder of the Devin config is a root the install owns');
 
       for (const [source, destination] of [
@@ -2958,8 +2962,11 @@ function runTests() {
     const previous = { KIMI_CODE_HOME: process.env.KIMI_CODE_HOME, VIBE_HOME: process.env.VIBE_HOME, CRUSH_GLOBAL_CONFIG: process.env.CRUSH_GLOBAL_CONFIG };
     for (const name of Object.keys(previous)) delete process.env[name];
     try {
+      // The Devin user config sits under ~/.config on Linux and macOS and
+      // under %APPDATA% on Windows: the module that places it says where.
+      const devinConfig = require('../../scripts/lib/devin-local-hooks').resolveDevinUserConfigPath(homeDir);
       const cases = [
-        { target: 'windsurf', hooksFile: path.join(homeDir, '.config', 'devin', 'config.json'), root: path.join(homeDir, '.codeium', 'windsurf'), script: 'devin-session-start.js', events: ['SessionStart', 'Stop'] },
+        { target: 'windsurf', hooksFile: devinConfig, root: path.join(homeDir, '.codeium', 'windsurf'), script: 'devin-session-start.js', events: ['SessionStart', 'Stop'] },
         { target: 'kimi', hooksFile: path.join(homeDir, '.kimi-code', 'config.toml'), root: path.join(homeDir, '.kimi-code'), script: 'kimi-session-start.js', events: ['kimi:session_start', 'kimi:stop'] },
         { target: 'vibe', hooksFile: path.join(homeDir, '.vibe', 'hooks.toml'), root: path.join(homeDir, '.vibe'), script: 'vibe-session-start.js', events: ['vibe:session_start', 'vibe:post_agent'] },
         { target: 'vibe-project', hooksFile: path.join(projectRoot, '.vibe', 'hooks.toml'), root: path.join(projectRoot, '.vibe'), script: 'vibe-session-start.js', events: ['vibe:session_start', 'vibe:post_agent'] },

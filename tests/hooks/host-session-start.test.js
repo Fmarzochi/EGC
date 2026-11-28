@@ -140,7 +140,12 @@ const payloads = {
 const environments = {
   devin: { DEVIN_PROJECT_DIR: project },
 };
-// The context a host reads back, in the shape of its own contract.
+// The context the hook answers, in the shape of the host's contract. The
+// hook cannot know what the host does with it: Junie, Auggie, Kimi Code and
+// Crush discard the output of their session-start event, so the answer is
+// still checked here (the pull and the restore ran, and the hook never
+// blocks the session), and those sessions read the memory through
+// get_state, which the memory server's own tests cover.
 function restoredContext(host, output) {
   if (host === 'vibe') return output.hook_specific_output && output.hook_specific_output.additional_context;
   return output.additionalContext;
@@ -173,6 +178,7 @@ try {
       fs.writeFileSync(stateFile, `# Project State\n- ${host} resumes feature Z\n`);
       const result = runHook(path.join(HOOKS, `${host}-session-start.js`), home, payloads[host], environments[host]);
       assert.strictEqual(result.code, 0, result.stderr);
+      assert.strictEqual(result.stderr, '', 'the hook never writes to stderr, so a host that reads it sees nothing to block on');
       const output = parseJson(result.stdout);
       assert.ok(output, `the hook answers JSON, got: ${result.stdout.slice(0, 200)}`);
       const context = restoredContext(host, output);

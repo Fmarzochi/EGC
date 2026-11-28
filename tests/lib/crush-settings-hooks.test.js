@@ -228,6 +228,13 @@ function runTests() {
       assert.strictEqual(CRUSH_HOOK_OPERATION_HANDLERS.inspect(start), 'ok');
       assert.strictEqual(CRUSH_HOOK_OPERATION_HANDLERS.inspect(stop), 'ok');
       assert.strictEqual(inspectCrushHookFile(configPath, guardian, CRUSH_GUARDIAN_MATCHER), 'ok');
+      const edited = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      edited.hooks.TurnEnd[0].matcher = '^bash$';
+      fs.writeFileSync(configPath, JSON.stringify(edited, null, 2));
+      assert.strictEqual(CRUSH_HOOK_OPERATION_HANDLERS.inspect(stop), 'drifted', 'a matcher put on a session entry by hand is drift');
+      CRUSH_HOOK_OPERATION_HANDLERS.apply(stop);
+      assert.deepStrictEqual(JSON.parse(fs.readFileSync(configPath, 'utf8')).hooks.TurnEnd, [{ command: `"${process.execPath}" "${stop.hookScriptPath}"` }], 'repair rewrites the entry without the matcher, once');
+      assert.strictEqual(CRUSH_HOOK_OPERATION_HANDLERS.inspect(stop), 'ok');
       CRUSH_HOOK_OPERATION_HANDLERS.remove(start);
       const after = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       assert.deepStrictEqual(after.hooks.SessionStart, [{ command: 'node mine.js' }], 'only the EGC entry leaves the event');

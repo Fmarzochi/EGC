@@ -94,31 +94,40 @@ function resolveCrushGuardianAdapterDestination(targetRoot) {
  * @param {string} [matcher]
  * @returns {{config: Record<string, unknown>, changed: boolean}}
  */
+// Whether an entry carries the matcher an operation wants: the same string
+// for a tool event, none at all for a session event, so a session entry left
+// with a matcher by hand is not the entry EGC writes.
+function hasMatcher(entry, matcher) {
+  return matcher === undefined ? entry.matcher === undefined : entry.matcher === matcher;
+}
+
+// The entry as EGC writes it, over an entry it replaces: the command and the
+// matcher of the operation, and no matcher when the operation has none.
+function shapedEntry(entry, command, matcher) {
+  const rest = Object.fromEntries(Object.entries(entry).filter(([key]) => key !== 'matcher'));
+  return matcher === undefined ? { ...rest, command } : { ...rest, matcher, command };
+}
+
 function addCrushHookEntry(config, event, command, matcher) {
   const base = isPlainObject(config) ? config : {};
   const hooks = isPlainObject(base.hooks) ? { ...base.hooks } : {};
   const existing = Array.isArray(hooks[event]) ? hooks[event] : [];
 
-  if (existing.some(entry => isPlainObject(entry) && entry.command === command && (!matcher || entry.matcher === matcher))) {
+  if (existing.some(entry => isPlainObject(entry) && entry.command === command && hasMatcher(entry, matcher))) {
     return { config: base, changed: false };
   }
 
-  const extraFields = matcher ? { matcher } : {};
   let migrated = false;
   const nextEntries = existing.map(entry => {
-    if (!migrated && isStaleEgcEntry(entry, command, isOwnBasename)) {
+    if (!migrated && (isStaleEgcEntry(entry, command, isOwnBasename) || (isPlainObject(entry) && entry.command === command))) {
       migrated = true;
-      return { ...entry, ...extraFields, command };
-    }
-    if (!migrated && isPlainObject(entry) && entry.command === command) {
-      migrated = true;
-      return { ...entry, ...extraFields, command };
+      return shapedEntry(entry, command, matcher);
     }
     return entry;
   });
 
   if (!migrated) {
-    nextEntries.push({ ...extraFields, command });
+    nextEntries.push(shapedEntry({}, command, matcher));
   }
 
   hooks[event] = nextEntries;
@@ -184,7 +193,7 @@ function inspectCrushHookFile(hooksJsonPath, hookScriptPath, matcher, event = PR
     const found = existing.some(entry => (
       isPlainObject(entry)
       && entry.command === command
-      && (matcher === undefined || entry.matcher === matcher)
+      && hasMatcher(entry, matcher)
     ));
     return found ? 'ok' : 'drifted';
   } catch {

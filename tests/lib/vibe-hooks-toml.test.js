@@ -205,8 +205,10 @@ tally(test('the session hooks go in as session_start and post_agent blocks with 
       ['egc-session-start', 'session_start'],
       ['egc-stop', 'post_agent'],
     ], 'one block per EGC hook, applied twice without doubling');
-    assert.deepStrictEqual(Object.keys(hooks[2]).sort(), ['command', 'description', 'name', 'strict', 'type'], 'a session block has no match key');
-    assert.strictEqual(hooks[2].strict, false, 'a restore that failed never stops the session');
+    for (const block of [hooks[2], hooks[3]]) {
+      assert.deepStrictEqual(Object.keys(block).sort(), ['command', 'description', 'name', 'strict', 'type'], `${block.name} has no match key`);
+      assert.strictEqual(block.strict, false, `${block.name}: a restore or a push that failed never stops the session`);
+    }
     assert.strictEqual(hooks[3].command, buildHookCommand(stop.hookScriptPath));
     assert.strictEqual(VIBE_HOOK_OPERATION_HANDLERS.inspect(start), 'ok');
     assert.strictEqual(VIBE_HOOK_OPERATION_HANDLERS.inspect(stop), 'ok');
