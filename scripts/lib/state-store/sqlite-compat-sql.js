@@ -9,14 +9,17 @@
 // timeout, synchronous) are dropped from the text before sql.js sees it.
 const SKIPPED_PRAGMA = /^PRAGMA[ \t]+(?:journal_mode|busy_timeout|synchronous)\b/i;
 // A trimmed statement counts as a plain read only when it is a SELECT, an
-// EXPLAIN, or a bare pragma from the allowlist of value-reporting pragmas.
-// Everything else (writes, DDL, ANALYZE, VACUUM, value-setting pragmas,
-// PRAGMA optimize, any CTE, any pragma not on the list) reaches the file; a
-// read misclassified as a write costs one extra save and nothing more.
-// The pragmas that only report, bare or with the object they describe in
-// parentheses: a statement the classifier counts as a write takes the write
-// lock and rewrites the file on the portable engine, so a read must not.
+// EXPLAIN, a bare pragma from the allowlist of value-reporting pragmas, or a
+// describing pragma with the object it describes in parentheses. Everything
+// else (writes, DDL, ANALYZE, VACUUM, value-setting pragmas, PRAGMA
+// optimize, any CTE, any pragma not on the lists) reaches the file: on the
+// portable engine a statement the classifier counts as a write takes the
+// write lock and rewrites the file, so a read misclassified as a write costs
+// one extra save and nothing more, and a read that comes back with rows
+// through all() must be classified as a read to cost nothing.
+// The bare pragmas that report a value.
 const REPORTING_PRAGMA = /^PRAGMA[ \t]+(?:user_version|schema_version|application_id|journal_mode|synchronous|foreign_keys|busy_timeout|page_size|page_count|freelist_count|integrity_check|quick_check|compile_options|database_list|table_list|collation_list|encoding)$/i;
+// The pragmas that describe a table or an index named in parentheses.
 const DESCRIBING_PRAGMA = /^PRAGMA[ \t]+(?:table_info|table_xinfo|index_list|index_info|index_xinfo|foreign_key_list)\([^)]*\)$/i;
 const READ_ONLY_STATEMENT = /^(?:SELECT\b|EXPLAIN\b)/i;
 
