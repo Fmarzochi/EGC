@@ -17,7 +17,7 @@ function readPayload() {
   try {
     const parsed = JSON.parse(fs.readFileSync(0, 'utf8'));
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
-  } catch (_) { // NOSONAR: a missing or malformed payload starts the session without context
+  } catch (_) { // NOSONAR: a missing or malformed payload restores the memory of the working directory
     // fall through to the empty payload
   }
   return {};

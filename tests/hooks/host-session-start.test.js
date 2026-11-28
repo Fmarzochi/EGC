@@ -68,11 +68,44 @@ function parseJson(text) {
   }
 }
 
-function copyTree(relativePath, destination) {
-  fs.cpSync(path.join(REPO_ROOT, relativePath), destination, {
-    recursive: true,
-    filter: source => !source.includes(`${path.sep}__pycache__`),
-  });
+// The runtime as an install lays it out: only the files the plan copies, each
+// under its own path, so a require one of them makes and the plan forgot
+// fails here and not on the machine of the person.
+function copyPlannedRuntime(root, sources) {
+  for (const source of sources) {
+    const destination = path.join(root, ...source.split('/'));
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.copyFileSync(path.join(REPO_ROOT, ...source.split('/')), destination);
+  }
+}
+
+// The requires a copied file makes only as a fallback, inside its own
+// try/catch, for a layout this one is not: the flattened egc/lib of Claude
+// Code (session-marker.js and propagate-state.js next to the hook) and the
+// version read from a package.json two levels up, which an installed hook
+// does without.
+const OPTIONAL_REQUIRES = new Set([
+  'scripts/lib/session-start-adapter.js needs ./session-marker',
+  'scripts/check-state-leak.js needs ./propagate-state',
+  'scripts/lib/team-mcp-client.js needs ../../package.json',
+]);
+
+// Every relative require of the copied files, resolved among the copies;
+// comment lines are not read, and the fallbacks above are not demanded.
+function unresolvedRequires(root, sources) {
+  const missing = [];
+  for (const source of sources) {
+    const file = path.join(root, ...source.split('/'));
+    const code = fs.readFileSync(file, 'utf8').split('\n').filter(line => !line.trim().startsWith('//')).join('\n');
+    for (const match of code.matchAll(/require\((['"])(\.[^'"]+)\1\)/g)) {
+      const need = `${source} needs ${match[2]}`;
+      if (OPTIONAL_REQUIRES.has(need)) continue;
+      const target = path.resolve(path.dirname(file), match[2]);
+      const candidates = [target, `${target}.js`, path.join(target, 'index.js')];
+      if (!candidates.some(candidate => fs.existsSync(candidate))) missing.push(need);
+    }
+  }
+  return missing;
 }
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-host-session-'));
@@ -159,16 +192,18 @@ try {
     assert.deepStrictEqual(parseJson(result.stdout), {}, 'no project named and no memory for the working directory');
   });
 
-  test('the hooks run from the layout an install writes, with the runtime kept under scripts/', () => {
+  test('the hooks run from the layout an install writes, with only the files the plan copies, and every require of those files resolves among them', () => {
+    const { SESSION_HOOK_LIB_SOURCES, TEAM_SYNC_STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH } = require(path.join(REPO_ROOT, 'scripts', 'lib', 'claude-settings-hook-copy-operations.js'));
+    const sources = ['scripts/hooks/qwen-session-start.js', TEAM_SYNC_STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH, ...SESSION_HOOK_LIB_SOURCES];
     const installed = path.join(root, 'home-installed');
     fs.mkdirSync(path.join(installed, '.egc', 'state'), { recursive: true });
     const qwenRoot = path.join(root, 'project-installed', '.qwen');
-    copyTree('scripts/hooks', path.join(qwenRoot, 'scripts', 'hooks'));
-    copyTree('scripts/lib', path.join(qwenRoot, 'scripts', 'lib'));
-    fs.copyFileSync(path.join(REPO_ROOT, 'scripts', 'check-state-leak.js'), path.join(qwenRoot, 'scripts', 'check-state-leak.js'));
+    copyPlannedRuntime(qwenRoot, sources);
+    assert.deepStrictEqual(unresolvedRequires(qwenRoot, sources), [], 'every file the copied runtime requires is in the plan');
     fs.writeFileSync(path.join(installed, '.egc', 'state', 'work--demo.md'), '# Project State\n- installed layout works\n');
     const result = runHook(path.join(qwenRoot, 'scripts', 'hooks', 'qwen-session-start.js'), installed, payloads.qwen);
     assert.strictEqual(result.code, 0, result.stderr);
+    assert.strictEqual(result.stderr, '', 'nothing of the copied runtime failed to load');
     const output = parseJson(result.stdout);
     assert.ok(output && output.additionalContext.includes('installed layout works'), `the installed copy restores the state, got: ${result.stdout.slice(0, 200)}`);
     const stop = runHook(path.join(qwenRoot, 'scripts', 'hooks', 'team-sync-stop.js'), installed, {});

@@ -404,6 +404,15 @@ function createAdapterStdinJsonCopyOperation(createRemappedOperation, targetRoot
 const HOST_SESSION_HOOK_MODULE_ID = 'egc-host-session-hook';
 const TEAM_SYNC_STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/team-sync-stop.js';
 const SESSION_HOOK_LIB_SOURCES = [
+  // What state-crypto.js, global-state.js, learning-store.js and
+  // resolve-egc-root.js load at the top: without them the restore and the
+  // sync fail silently where no gate planted them (Goose's own plugin).
+  'scripts/lib/hook-stdin.js',
+  'scripts/lib/utils.js',
+  'scripts/lib/utils-file.js',
+  'scripts/lib/utils-paths.js',
+  'scripts/lib/utils-platform.js',
+  'scripts/lib/utils-session.js',
   'scripts/lib/host-session-start.js',
   'scripts/lib/session-start-adapter.js',
   'scripts/lib/dashboard-token.js',
@@ -428,9 +437,20 @@ function resolveTeamSyncStopHookScriptDestination(targetRoot) {
   return path.join(targetRoot, ...TEAM_SYNC_STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH.split('/'));
 }
 
+// A destination the target already plans, as the file itself or as a
+// directory above it: a selected module that copies scripts/lib whole
+// covers every file under it.
+function isPlannedDestination(plannedDestinations, destinationPath) {
+  for (const planned of plannedDestinations) {
+    if (destinationPath === planned || destinationPath.startsWith(planned + path.sep)) return true;
+  }
+  return false;
+}
+
 // The copies of the session hooks and what they load, under targetRoot; a
 // destination the target already plans (the gates share several of these
-// files) is left to that plan, so no file is planned twice.
+// files, and a module may copy a whole folder) is left to that plan, so no
+// file is planned twice.
 function createHostSessionHookCopyOperations(createRemappedOperation, targetRoot, sessionStartSourceRelativePath, plannedDestinations = new Set()) {
   return [sessionStartSourceRelativePath, TEAM_SYNC_STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH, ...SESSION_HOOK_LIB_SOURCES]
     .map(sourceRelativePath => createRemappedOperation(
@@ -439,7 +459,7 @@ function createHostSessionHookCopyOperations(createRemappedOperation, targetRoot
       path.join(targetRoot, ...sourceRelativePath.split('/')),
       { strategy: 'preserve-relative-path' }
     ))
-    .filter(operation => !plannedDestinations.has(operation.destinationPath));
+    .filter(operation => !isPlannedDestination(plannedDestinations, operation.destinationPath));
 }
 
 function createSessionStartHookMergeOperationForDestination(destinationPath, hookScriptPath, sourceRelativePath) {
